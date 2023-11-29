@@ -8,7 +8,8 @@ import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 
 /// @notice Hold the deployment bytecode
 ///         Separate from build contract to avoid bytecode size limitations
-contract Build_L2OutputOracle is ISemver {
+// contract BuildL2OutputOracle is IBuild_L2OutputOracle, ISemver {
+contract BuildL2OutputOracle is ISemver {
     /// @notice Semantic version.
     /// @custom:semver 1.0.0
     string public constant version = "1.0.0";

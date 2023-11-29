@@ -6,7 +6,7 @@ import { SystemConfig } from "src/L1/SystemConfig.sol";
 
 /// @notice Hold the deployment bytecode
 ///         Separate from build contract to avoid bytecode size limitations
-contract Build_SystemConfig is ISemver {
+contract BuildSystemConfig is ISemver {
     /// @notice Semantic version.
     /// @custom:semver 1.0.0
     string public constant version = "1.0.0";

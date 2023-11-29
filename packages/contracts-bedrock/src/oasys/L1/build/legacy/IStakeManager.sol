@@ -19,8 +19,5 @@ interface IStakeManager {
      * @param epoch Target epoch number.
      * @return stakes Staked amounts.
      */
-    function getOperatorStakes(
-        address operator,
-        uint256 epoch
-    ) external view returns (uint256 stakes);
+    function getOperatorStakes(address operator, uint256 epoch) external view returns (uint256 stakes);
 }

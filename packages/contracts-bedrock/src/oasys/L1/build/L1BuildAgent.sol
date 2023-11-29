@@ -13,8 +13,8 @@ import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { Constants } from "src/libraries/Constants.sol";
-import { IBuild_Common } from "src/oasys/L1/build/interfaces/IBuild_Common.sol";
-import { IBuild_L2OutputOracle } from "src/oasys/L1/build/interfaces/IBuild_L2OutputOracle.sol";
+import { IBuildCommon } from "src/oasys/L1/build/interfaces/IBuildCommon.sol";
+import { IBuildL2OutputOracle } from "src/oasys/L1/build/interfaces/IBuildL2OutputOracle.sol";
 import { IL1BuildAgentV1 } from "src/oasys/L1/build/interfaces/IL1BuildAgentV1.sol";
 
 /// @notice The 2nd version of L1BuildAgent
@@ -24,12 +24,12 @@ import { IL1BuildAgentV1 } from "src/oasys/L1/build/interfaces/IL1BuildAgentV1.s
 contract L1BuildAgent is ISemver {
     /// @notice These hold the bytecodes of the contracts that are deployed by this contract.
     ///         Separate to avoid hitting the contract size limit.
-    IBuild_L2OutputOracle public immutable BUILD_L2OUTPUT_ORACLE;
-    IBuild_Common public immutable BUILD_OPTIMISM_PORTAL;
-    IBuild_Common public immutable BUILD_L1CROSS_DOMAIN_MESSENGER;
-    IBuild_Common public immutable BUILD_SYSTEM_CONFIG;
-    IBuild_Common public immutable BUILD_L1_STANDARD_BRIDGE;
-    IBuild_Common public immutable _BUILD_L1_ERC721_BRIDGE;
+    IBuildL2OutputOracle public immutable BUILD_L2OUTPUT_ORACLE;
+    IBuildCommon public immutable BUILD_OPTIMISM_PORTAL;
+    IBuildCommon public immutable BUILD_L1CROSS_DOMAIN_MESSENGER;
+    IBuildCommon public immutable BUILD_SYSTEM_CONFIG;
+    IBuildCommon public immutable BUILD_L1_STANDARD_BRIDGE;
+    IBuildCommon public immutable _BUILD_L1_ERC721_BRIDGE;
 
     /// @notice The address of the L1BuildAgentV1
     ///         Used to ensure that the chainId is unique and not duplicated.
@@ -60,12 +60,12 @@ contract L1BuildAgent is ISemver {
     string public constant version = "2.0.0";
 
     constructor(
-        IBuild_L2OutputOracle _bOutputOracle,
-        IBuild_Common _bOptimismPortal,
-        IBuild_Common _bL1CrossDomainMessenger,
-        IBuild_Common _bSystemConfig,
-        IBuild_Common _bL1StandardBridg,
-        IBuild_Common _bL1ERC721Bridge,
+        IBuildL2OutputOracle _bOutputOracle,
+        IBuildCommon _bOptimismPortal,
+        IBuildCommon _bL1CrossDomainMessenger,
+        IBuildCommon _bSystemConfig,
+        IBuildCommon _bL1StandardBridg,
+        IBuildCommon _bL1ERC721Bridge,
         IL1BuildAgentV1 _buildAgentV1
     ) {
         BUILD_L2OUTPUT_ORACLE = _bOutputOracle;

@@ -19,32 +19,30 @@ import { PredeployAddresses } from "./PredeployAddresses.sol";
  * that verifies based on the verifier's total stake.
  */
 contract OasysStateCommitmentChainVerifier {
-    /**********
+    /**
+     *
      * Events *
-     **********/
+     *
+     */
 
-    event StateBatchApproved(
-        address indexed stateCommitmentChain,
-        uint256 indexed batchIndex,
-        bytes32 batchRoot
-    );
-    event StateBatchRejected(
-        address indexed stateCommitmentChain,
-        uint256 indexed batchIndex,
-        bytes32 batchRoot
-    );
+    event StateBatchApproved(address indexed stateCommitmentChain, uint256 indexed batchIndex, bytes32 batchRoot);
+    event StateBatchRejected(address indexed stateCommitmentChain, uint256 indexed batchIndex, bytes32 batchRoot);
 
-    /**********
+    /**
+     *
      * Errors *
-     **********/
+     *
+     */
 
     error InvalidSignature(bytes signature, string reason);
     error InvalidAddressSort(address signer);
     error StakeAmountShortage(uint256 required, uint256 verified);
 
-    /********************
+    /**
+     *
      * Public Functions *
-     ********************/
+     *
+     */
 
     /**
      * Approve the state batch.
@@ -56,16 +54,14 @@ contract OasysStateCommitmentChainVerifier {
         address stateCommitmentChain,
         Lib_OVMCodec.ChainBatchHeader memory batchHeader,
         bytes[] memory signatures
-    ) external {
+    )
+        external
+    {
         _verifySignatures(stateCommitmentChain, batchHeader, true, signatures);
 
         IOasysStateCommitmentChain(stateCommitmentChain).succeedVerification(batchHeader);
 
-        emit StateBatchApproved(
-            stateCommitmentChain,
-            batchHeader.batchIndex,
-            batchHeader.batchRoot
-        );
+        emit StateBatchApproved(stateCommitmentChain, batchHeader.batchIndex, batchHeader.batchRoot);
     }
 
     /**
@@ -78,21 +74,21 @@ contract OasysStateCommitmentChainVerifier {
         address stateCommitmentChain,
         Lib_OVMCodec.ChainBatchHeader memory batchHeader,
         bytes[] memory signatures
-    ) external {
+    )
+        external
+    {
         _verifySignatures(stateCommitmentChain, batchHeader, false, signatures);
 
         IOasysStateCommitmentChain(stateCommitmentChain).failVerification(batchHeader);
 
-        emit StateBatchRejected(
-            stateCommitmentChain,
-            batchHeader.batchIndex,
-            batchHeader.batchRoot
-        );
+        emit StateBatchRejected(stateCommitmentChain, batchHeader.batchIndex, batchHeader.batchRoot);
     }
 
-    /**********************
+    /**
+     *
      * Internal Functions *
-     **********************/
+     *
+     */
 
     /**
      * Verify signatures.
@@ -106,15 +102,14 @@ contract OasysStateCommitmentChainVerifier {
         Lib_OVMCodec.ChainBatchHeader memory batchHeader,
         bool approved,
         bytes[] memory signatures
-    ) internal view {
+    )
+        internal
+        view
+    {
         address[] memory verifiers = _recoverSigners(
             keccak256(
                 abi.encodePacked(
-                    block.chainid,
-                    stateCommitmentChain,
-                    batchHeader.batchIndex,
-                    batchHeader.batchRoot,
-                    approved
+                    block.chainid, stateCommitmentChain, batchHeader.batchIndex, batchHeader.batchRoot, approved
                 )
             ),
             signatures
@@ -152,7 +147,11 @@ contract OasysStateCommitmentChainVerifier {
     function _recoverSigners(
         bytes32 data,
         bytes[] memory signatures
-    ) internal pure returns (address[] memory signers) {
+    )
+        internal
+        pure
+        returns (address[] memory signers)
+    {
         signers = new address[](signatures.length);
 
         bytes32 _hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", data));
