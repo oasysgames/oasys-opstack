@@ -31,6 +31,9 @@ interface IL1BuildAgent {
         uint256 l2OutputOracleStartingTimestamp;
     }
 
+    /// @notice Event emitted when the L1 contract set is deployed
+    event Deployed(address owner, address proxyAdmin, address[6] proxys, address[6] impls, address batchInbox);
+
     function chainSystemConfig(uint256 chainId) external view returns (address systemConfig);
 
     function chainIds(uint256 index) external view returns (uint256 chainId);
