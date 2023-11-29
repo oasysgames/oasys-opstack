@@ -2,25 +2,26 @@
 pragma solidity 0.8.15;
 
 import { Create2 } from "@openzeppelin/contracts/utils/Create2.sol";
-import { ProxyAdmin } from "../../universal/ProxyAdmin.sol";
-import { Proxy } from "../../universal/Proxy.sol";
-import { OptimismPortal } from "../../L1/OptimismPortal.sol";
-import { L1StandardBridge } from "../../L1/L1StandardBridge.sol";
-import { L1ERC721Bridge } from "../../L1/L1ERC721Bridge.sol";
-import { L1CrossDomainMessenger } from "../../L1/L1CrossDomainMessenger.sol";
-import { L2OutputOracle } from "../../L1/L2OutputOracle.sol";
+import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
+import { Proxy } from "src/universal/Proxy.sol";
+import { OptimismPortal } from "src/L1/OptimismPortal.sol";
+import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
+import { L1ERC721Bridge } from "src/L1/L1ERC721Bridge.sol";
+import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
+import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 // import { L2OutputOracle } from "../L1/OasysL2OutputOracle.sol";
-import { SystemConfig } from "../../L1/SystemConfig.sol";
-import { Semver } from "../../universal/Semver.sol";
-import { Constants } from "../../libraries/Constants.sol";
-import { IBuild_Common } from "./interfaces/IBuild_Common.sol";
-import { IBuild_L2OutputOracle } from "./interfaces/IBuild_L2OutputOracle.sol";
-import { IL1BuildAgentV1 } from "./interfaces/IL1BuildAgentV1.sol";
+import { SystemConfig } from "src/L1/SystemConfig.sol";
+import { ISemver } from "src/universal/ISemver.sol";
+import { Constants } from "src/libraries/Constants.sol";
+import { IBuild_Common } from "src/oasys/L1/build/interfaces/IBuild_Common.sol";
+import { IBuild_L2OutputOracle } from "src/oasys/L1/build/interfaces/IBuild_L2OutputOracle.sol";
+import { IL1BuildAgentV1 } from "src/oasys/L1/build/interfaces/IL1BuildAgentV1.sol";
 
 /// @notice The 2nd version of L1BuildAgent
 ///         Regarding the build step, referred to the build script of Opstack
-///         Ref: https://github.com/ethereum-optimism/optimism/blob/v1.1.6/packages/contracts-bedrock/scripts/Deploy.s.sol#L67
-contract L1BuildAgent is Semver {
+///         Ref:
+/// https://github.com/ethereum-optimism/optimism/blob/v1.1.6/packages/contracts-bedrock/scripts/Deploy.s.sol#L67
+contract L1BuildAgent is ISemver {
     /// @notice These hold the bytecodes of the contracts that are deployed by this contract.
     ///         Separate to avoid hitting the contract size limit.
     IBuild_L2OutputOracle public immutable BUILD_L2OUTPUT_ORACLE;
@@ -40,25 +41,23 @@ contract L1BuildAgent is Semver {
 
     /// @notice List of chainIds that have been deployed, Return all chainIds at once
     ///         The size of the array isn't a concern; the limitation lies in the gas cost and comuputaion time.
-    ///         Ref: https://betterprogramming.pub/issues-of-returning-arrays-of-dynamic-size-in-solidity-smart-contracts-dd1e54424235
+    ///         Ref:
+    /// https://betterprogramming.pub/issues-of-returning-arrays-of-dynamic-size-in-solidity-smart-contracts-dd1e54424235
     uint256[] public chainIds;
 
     /// @notice The base number to generate batch inbox address
-    uint160 public constant BASE_BATCH_INBOX_ADDRESS =
-        uint160(0xfF0000000000000000000000000000000000FF00);
+    uint160 public constant BASE_BATCH_INBOX_ADDRESS = uint160(0xfF0000000000000000000000000000000000FF00);
 
     /// @notice The create2 salt used for deployment of the contract implementations.
     ///         Using this helps to reduce duplicated deployment costs
     bytes32 public constant SALT = keccak256("implementation contract salt");
 
     /// @notice Event emitted when the L1 contract set is deployed
-    event Deployed(
-        address owner,
-        address proxyAdmin,
-        address[6] proxys,
-        address[6] impls,
-        address batchInbox
-    );
+    event Deployed(address owner, address proxyAdmin, address[6] proxys, address[6] impls, address batchInbox);
+
+    /// @notice Semantic version.
+    /// @custom:semver 2.0.0
+    string public constant version = "2.0.0";
 
     constructor(
         IBuild_L2OutputOracle _bOutputOracle,
@@ -68,7 +67,7 @@ contract L1BuildAgent is Semver {
         IBuild_Common _bL1StandardBridg,
         IBuild_Common _bL1ERC721Bridge,
         IL1BuildAgentV1 _buildAgentV1
-    ) Semver(2, 0, 0) {
+    ) {
         BUILD_L2OUTPUT_ORACLE = _bOutputOracle;
         BUILD_OPTIMISM_PORTAL = _bOptimismPortal;
         BUILD_L1CROSS_DOMAIN_MESSENGER = _bL1CrossDomainMessenger;
@@ -95,10 +94,12 @@ contract L1BuildAgent is Semver {
         // the block time of l2 chain
         // Value: 2s
         uint256 l2BlockTime;
-        // Used for calculate the next checkpoint block number, in Opstack case, 120 is set in testnet. 2s(default l2 block time) * 120 = 240s. submit l2 root every 240s. it means l2->l1 withdrawal will be available every 240s.
+        // Used for calculate the next checkpoint block number, in Opstack case, 120 is set in testnet. 2s(default l2
+        // block time) * 120 = 240s. submit l2 root every 240s. it means l2->l1 withdrawal will be available every 240s.
         // Value: 120
         uint256 l2OutputOracleSubmissionInterval;
-        // The amount of time that must pass for an output proposal to be considered canonical. Once this time past, anybody can delete l2 root.
+        // The amount of time that must pass for an output proposal to be considered canonical. Once this time past,
+        // anybody can delete l2 root.
         // Value: 7 days
         uint256 finalizationPeriodSeconds;
         /// ------ considering to remove the following parameters ------
@@ -162,18 +163,14 @@ contract L1BuildAgent is Semver {
         if (L1_BUILD_AGENT_V1 == IL1BuildAgentV1(address(0))) {
             return _isInternallyUniqueChainId(_chainId);
         }
-        return
-            _isInternallyUniqueChainId(_chainId) &&
-            L1_BUILD_AGENT_V1.getAddressManager(_chainId) == address(0);
+        return _isInternallyUniqueChainId(_chainId) && L1_BUILD_AGENT_V1.getAddressManager(_chainId) == address(0);
     }
 
     function _isInternallyUniqueChainId(uint256 _chainId) internal view returns (bool) {
         return chainSystemConfig[_chainId] == address(0);
     }
 
-    function _deployProxies(
-        address admin
-    ) internal returns (ProxyAdmin proxyAdmin, address[6] memory proxys) {
+    function _deployProxies(address admin) internal returns (ProxyAdmin proxyAdmin, address[6] memory proxys) {
         proxyAdmin = new ProxyAdmin({ _owner: admin });
         proxys[0] = _deployProxy(address(proxyAdmin)); // OptimismPortalProxy
         proxys[1] = _deployProxy(address(proxyAdmin)); // L2OutputOracleProxy
@@ -190,15 +187,11 @@ contract L1BuildAgent is Semver {
     }
 
     /// @notice Deploy all of the implementations
-    function _deployImplementations(
-        BuildConfig calldata _cfg
-    ) internal returns (address[6] memory impls) {
+    function _deployImplementations(BuildConfig calldata _cfg) internal returns (address[6] memory impls) {
         impls[0] = _deployImplementation(BUILD_OPTIMISM_PORTAL.deployBytecode());
         impls[1] = _deployImplementation(
             BUILD_L2OUTPUT_ORACLE.deployBytecode(
-                _cfg.l2OutputOracleSubmissionInterval,
-                _cfg.l2BlockTime,
-                _cfg.finalizationPeriodSeconds
+                _cfg.l2OutputOracleSubmissionInterval, _cfg.l2BlockTime, _cfg.finalizationPeriodSeconds
             )
         );
         impls[2] = _deployImplementation(BUILD_SYSTEM_CONFIG.deployBytecode());
@@ -222,7 +215,9 @@ contract L1BuildAgent is Semver {
         address impl,
         address[6] memory proxys,
         address batchInbox
-    ) internal {
+    )
+        internal
+    {
         SystemConfig.Addresses memory sysAddrs = SystemConfig.Addresses({
             l1CrossDomainMessenger: proxys[3], // L1CrossDomainMessengerProxy
             l1ERC721Bridge: proxys[5], // L1ERC721BridgeProxy,
@@ -230,7 +225,7 @@ contract L1BuildAgent is Semver {
             l2OutputOracle: proxys[1], // L2OutputOracleProxy,
             optimismPortal: proxys[0], // OptimismPortalProxy,
             optimismMintableERC20Factory: address(0) // OptimismMintableERC20FactoryProxy
-        });
+         });
 
         proxyAdmin.upgradeAndCall({
             _proxy: payable(proxys[2]),
@@ -251,16 +246,12 @@ contract L1BuildAgent is Semver {
                     batchInbox,
                     sysAddrs
                 )
-            )
+                )
         });
     }
 
     /// @notice Initialize the L1StandardBridge
-    function _initializeL1StandardBridge(
-        ProxyAdmin proxyAdmin,
-        address impl,
-        address[6] memory proxys
-    ) internal {
+    function _initializeL1StandardBridge(ProxyAdmin proxyAdmin, address impl, address[6] memory proxys) internal {
         address l1StandardBridgeProxy = proxys[4];
         // proxyAdmin.setProxyType(l1StandardBridgeProxy, ProxyAdmin.ProxyType.ERC1967);
         proxyAdmin.upgradeAndCall({
@@ -271,11 +262,7 @@ contract L1BuildAgent is Semver {
     }
 
     /// @notice Initialize the L1ERC721Bridge
-    function _initializeL1ERC721Bridge(
-        ProxyAdmin proxyAdmin,
-        address impl,
-        address[6] memory proxys
-    ) internal {
+    function _initializeL1ERC721Bridge(ProxyAdmin proxyAdmin, address impl, address[6] memory proxys) internal {
         address l1ERC721BridgeProxy = proxys[5];
         proxyAdmin.upgradeAndCall({
             _proxy: payable(l1ERC721BridgeProxy),
@@ -289,7 +276,9 @@ contract L1BuildAgent is Semver {
         ProxyAdmin proxyAdmin,
         address impl,
         address[6] memory proxys
-    ) internal {
+    )
+        internal
+    {
         address l1CrossDomainMessengerProxy = proxys[3];
         // proxyAdmin.setProxyType(l1CrossDomainMessengerProxy, ProxyAdmin.ProxyType.RESOLVED);
         // string memory contractName = "OVM_L1CrossDomainMessenger";
@@ -299,10 +288,7 @@ contract L1BuildAgent is Semver {
         proxyAdmin.upgradeAndCall({
             _proxy: payable(l1CrossDomainMessengerProxy),
             _implementation: impl,
-            _data: abi.encodeCall(
-                L1CrossDomainMessenger.initialize,
-                (OptimismPortal(payable(proxys[0])))
-            )
+            _data: abi.encodeCall(L1CrossDomainMessenger.initialize, (OptimismPortal(payable(proxys[0]))))
         });
     }
 
@@ -312,7 +298,9 @@ contract L1BuildAgent is Semver {
         ProxyAdmin proxyAdmin,
         address impl,
         address[6] memory proxys
-    ) internal {
+    )
+        internal
+    {
         address l2OutputOracleProxy = proxys[1];
 
         proxyAdmin.upgradeAndCall({
@@ -326,7 +314,7 @@ contract L1BuildAgent is Semver {
                     _cfg.l2OutputOracleProposer,
                     _cfg.l2OutputOracleChallenger
                 )
-            )
+                )
         });
     }
 
@@ -336,7 +324,9 @@ contract L1BuildAgent is Semver {
         ProxyAdmin proxyAdmin,
         address impl,
         address[6] memory proxys
-    ) internal {
+    )
+        internal
+    {
         address optimismPortalProxy = proxys[0];
 
         proxyAdmin.upgradeAndCall({
@@ -352,15 +342,12 @@ contract L1BuildAgent is Semver {
                     SystemConfig(proxys[2]),
                     false
                 )
-            )
+                )
         });
     }
 
     /// @notice Transfer ownership of the ProxyAdmin contract to the final system owner
-    function _transferProxyAdminOwnership(
-        BuildConfig calldata _cfg,
-        ProxyAdmin proxyAdmin
-    ) internal {
+    function _transferProxyAdminOwnership(BuildConfig calldata _cfg, ProxyAdmin proxyAdmin) internal {
         address owner = proxyAdmin.owner();
         address finalSystemOwner = _cfg.finalSystemOwner;
         if (owner != finalSystemOwner) {

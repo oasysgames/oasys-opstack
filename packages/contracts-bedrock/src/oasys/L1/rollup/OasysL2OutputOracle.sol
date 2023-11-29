@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { L2OutputOracle } from "../../L1/L2OutputOracle.sol";
-import { Lib_OVMCodec } from "./legacy/Lib_OVMCodec.sol";
-import { PredeployAddresses } from "./legacy/PredeployAddresses.sol";
+import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
+import { Lib_OVMCodec } from "src/oasys/L1/build/legacy/Lib_OVMCodec.sol";
+import { PredeployAddresses } from "src/oasys/L1/build/legacy/PredeployAddresses.sol";
 
 /// @custom:proxied
 /// @title OasysL2OutputOracle
@@ -22,7 +22,9 @@ contract OasysL2OutputOracle is L2OutputOracle {
         uint256 _submissionInterval,
         uint256 _l2BlockTime,
         uint256 _finalizationPeriodSeconds
-    ) L2OutputOracle(_submissionInterval, _l2BlockTime, _finalizationPeriodSeconds) {}
+    )
+        L2OutputOracle(_submissionInterval, _l2BlockTime, _finalizationPeriodSeconds)
+    { }
 
     /// @notice Override to pass zero value of `startingBlockNumber` and `startingTimestamp`
     function initialize(address _proposer, address _challenger) public {
@@ -43,7 +45,11 @@ contract OasysL2OutputOracle is L2OutputOracle {
         uint256 _l2BlockNumber,
         bytes32 _l1BlockHash,
         uint256 _l1BlockNumber
-    ) public payable override {
+    )
+        public
+        payable
+        override
+    {
         // compute l2 block number and timestamp when the first l2 block is submitted
         if (latestBlockNumber() == 0) {
             startingBlockNumber = _l2BlockNumber - SUBMISSION_INTERVAL;
@@ -75,9 +81,7 @@ contract OasysL2OutputOracle is L2OutputOracle {
      * @param _batchHeader Batch header to validate.
      * @return Whether or not the header matches the stored one.
      */
-    function _isValidBatchHeader(
-        Lib_OVMCodec.ChainBatchHeader memory _batchHeader
-    ) internal view returns (bool) {
+    function _isValidBatchHeader(Lib_OVMCodec.ChainBatchHeader memory _batchHeader) internal view returns (bool) {
         return _batchHeader.batchRoot == getL2OutputAfter(_batchHeader.batchIndex).outputRoot;
     }
 
