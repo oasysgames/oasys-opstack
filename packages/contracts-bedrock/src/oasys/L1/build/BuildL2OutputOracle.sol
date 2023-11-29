@@ -12,11 +12,15 @@ contract BuildL2OutputOracle is IBuildL2OutputOracle, ISemver {
     /// @custom:semver 1.0.0
     string public constant version = "1.0.0";
 
-    /// @notice The create2 salt used for deployment of the contract implementations.
+    /// @inheritdoc IBuildL2OutputOracle
     function deployBytecode(
-        uint256 l2OutputOracleSubmissionInterval,
-        uint256 l2BlockTime,
-        uint256 finalizationPeriodSeconds
+        uint256 _submissionInterval,
+        uint256 _l2BlockTime,
+        uint256 _startingBlockNumber,
+        uint256 _startingTimestamp,
+        address _proposer,
+        address _challenger,
+        uint256 _finalizationPeriodSeconds
     )
         public
         pure
@@ -24,7 +28,15 @@ contract BuildL2OutputOracle is IBuildL2OutputOracle, ISemver {
     {
         return abi.encodePacked(
             abi.encodePacked(type(L2OutputOracle).creationCode),
-            abi.encode(l2OutputOracleSubmissionInterval, l2BlockTime, finalizationPeriodSeconds)
+            abi.encode(
+                _submissionInterval,
+                _l2BlockTime,
+                _startingBlockNumber,
+                _startingTimestamp,
+                _proposer,
+                _challenger,
+                _finalizationPeriodSeconds
+            )
         );
     }
 }

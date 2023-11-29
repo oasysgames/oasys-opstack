@@ -13,8 +13,13 @@ import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { Constants } from "src/libraries/Constants.sol";
-import { IBuildCommon } from "src/oasys/L1/build/interfaces/IBuildCommon.sol";
 import { IBuildL2OutputOracle } from "src/oasys/L1/build/interfaces/IBuildL2OutputOracle.sol";
+import { IBuildOptimismPortal } from "src/oasys/L1/build/interfaces/IBuildOptimismPortal.sol";
+import { IBuildL1CrossDomainMessenger } from "src/oasys/L1/build/interfaces/IBuildL1CrossDomainMessenger.sol";
+import { IBuildSystemConfig } from "src/oasys/L1/build/interfaces/IBuildSystemConfig.sol";
+import { IBuildL1StandardBridge } from "src/oasys/L1/build/interfaces/IBuildL1StandardBridge.sol";
+import { IBuildL1ERC721Bridge } from "src/oasys/L1/build/interfaces/IBuildL1ERC721Bridge.sol";
+
 import { IL1BuildAgentV1 } from "src/oasys/L1/build/interfaces/IL1BuildAgentV1.sol";
 
 /// @notice The 2nd version of L1BuildAgent
@@ -25,11 +30,11 @@ contract L1BuildAgent is ISemver {
     /// @notice These hold the bytecodes of the contracts that are deployed by this contract.
     ///         Separate to avoid hitting the contract size limit.
     IBuildL2OutputOracle public immutable BUILD_L2OUTPUT_ORACLE;
-    IBuildCommon public immutable BUILD_OPTIMISM_PORTAL;
-    IBuildCommon public immutable BUILD_L1CROSS_DOMAIN_MESSENGER;
-    IBuildCommon public immutable BUILD_SYSTEM_CONFIG;
-    IBuildCommon public immutable BUILD_L1_STANDARD_BRIDGE;
-    IBuildCommon public immutable _BUILD_L1_ERC721_BRIDGE;
+    IBuildOptimismPortal public immutable BUILD_OPTIMISM_PORTAL;
+    IBuildL1CrossDomainMessenger public immutable BUILD_L1CROSS_DOMAIN_MESSENGER;
+    IBuildSystemConfig public immutable BUILD_SYSTEM_CONFIG;
+    IBuildL1StandardBridge public immutable BUILD_L1_STANDARD_BRIDGE;
+    IBuildL1ERC721Bridge public immutable BUILD_L1_ERC721_BRIDGE;
 
     /// @notice The address of the L1BuildAgentV1
     ///         Used to ensure that the chainId is unique and not duplicated.
@@ -61,11 +66,11 @@ contract L1BuildAgent is ISemver {
 
     constructor(
         IBuildL2OutputOracle _bOutputOracle,
-        IBuildCommon _bOptimismPortal,
-        IBuildCommon _bL1CrossDomainMessenger,
-        IBuildCommon _bSystemConfig,
-        IBuildCommon _bL1StandardBridg,
-        IBuildCommon _bL1ERC721Bridge,
+        IBuildOptimismPortal _bOptimismPortal,
+        IBuildL1CrossDomainMessenger _bL1CrossDomainMessenger,
+        IBuildSystemConfig _bSystemConfig,
+        IBuildL1StandardBridge _bL1StandardBridg,
+        IBuildL1ERC721Bridge _bL1ERC721Bridge,
         IL1BuildAgentV1 _buildAgentV1
     ) {
         BUILD_L2OUTPUT_ORACLE = _bOutputOracle;
@@ -73,7 +78,7 @@ contract L1BuildAgent is ISemver {
         BUILD_L1CROSS_DOMAIN_MESSENGER = _bL1CrossDomainMessenger;
         BUILD_SYSTEM_CONFIG = _bSystemConfig;
         BUILD_L1_STANDARD_BRIDGE = _bL1StandardBridg;
-        _BUILD_L1_ERC721_BRIDGE = _bL1ERC721Bridge;
+        BUILD_L1_ERC721_BRIDGE = _bL1ERC721Bridge;
 
         L1_BUILD_AGENT_V1 = _buildAgentV1;
     }
@@ -196,8 +201,8 @@ contract L1BuildAgent is ISemver {
         );
         impls[2] = _deployImplementation(BUILD_SYSTEM_CONFIG.deployBytecode());
         impls[3] = _deployImplementation(BUILD_L1CROSS_DOMAIN_MESSENGER.deployBytecode());
-        impls[4] = _deployImplementation(_BUILD_L1_ERC721_BRIDGE.deployBytecode());
-        impls[5] = _deployImplementation(_BUILD_L1_ERC721_BRIDGE.deployBytecode());
+        impls[4] = _deployImplementation(BUILD_L1_ERC721_BRIDGE.deployBytecode());
+        impls[5] = _deployImplementation(BUILD_L1_ERC721_BRIDGE.deployBytecode());
     }
 
     function _deployImplementation(bytes memory bytecode) public returns (address addr) {
