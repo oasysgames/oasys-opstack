@@ -14,22 +14,7 @@ contract BuildL1StandardBridge is IBuildL1StandardBridge, ISemver {
     string public constant version = "1.0.0";
 
     /// @inheritdoc IBuildL1StandardBridge
-    function deployBytecode(
-        address _owner,
-        uint256 _overhead,
-        uint256 _scalar,
-        bytes32 _batcherHash,
-        uint64 _gasLimit,
-        address _unsafeBlockSigner,
-        ResourceMetering.ResourceConfig memory _config
-    )
-        public
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodePacked(
-            type(L1StandardBridge).creationCode,
-            abi.encode(_owner, _overhead, _scalar, _batcherHash, _gasLimit, _unsafeBlockSigner, _config)
-        );
+    function deployBytecode(address payable _messenger) public pure returns (bytes memory) {
+        return abi.encodePacked(type(L1StandardBridge).creationCode, abi.encode(_messenger));
     }
 }

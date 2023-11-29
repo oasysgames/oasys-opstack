@@ -16,8 +16,6 @@ contract BuildL2OutputOracle is IBuildL2OutputOracle, ISemver {
     function deployBytecode(
         uint256 _submissionInterval,
         uint256 _l2BlockTime,
-        uint256 _startingBlockNumber,
-        uint256 _startingTimestamp,
         address _proposer,
         address _challenger,
         uint256 _finalizationPeriodSeconds
@@ -31,12 +29,24 @@ contract BuildL2OutputOracle is IBuildL2OutputOracle, ISemver {
             abi.encode(
                 _submissionInterval,
                 _l2BlockTime,
-                _startingBlockNumber,
-                _startingTimestamp,
+                0, // _startingBlockNumber
+                0, // _startingTimestamp
                 _proposer,
                 _challenger,
                 _finalizationPeriodSeconds
             )
         );
+    }
+
+    /// @inheritdoc IBuildL2OutputOracle
+    function initializeData(
+        uint256 _startingBlockNumber,
+        uint256 _startingTimestamp
+    )
+        external
+        pure
+        returns (bytes memory)
+    {
+        return abi.encodeCall(L2OutputOracle.initialize, (_startingBlockNumber, _startingTimestamp));
     }
 }

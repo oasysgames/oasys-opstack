@@ -14,7 +14,12 @@ contract BuildL1CrossDomainMessenger is IBuildL1CrossDomainMessenger, ISemver {
     string public constant version = "1.0.0";
 
     /// @inheritdoc IBuildL1CrossDomainMessenger
-    function deployBytecode(OptimismPortal _portal) public pure returns (bytes memory) {
-        return abi.encodePacked(type(L1CrossDomainMessenger).creationCode, abi.encode(_portal));
+    function deployBytecode(address payable _portal) public pure returns (bytes memory) {
+        return abi.encodePacked(type(L1CrossDomainMessenger).creationCode, abi.encode(OptimismPortal(_portal)));
+    }
+
+    /// @notice Return data for initializer.
+    function initializeData() external pure returns (bytes memory) {
+        return abi.encodeCall(L1CrossDomainMessenger.initialize, ());
     }
 }

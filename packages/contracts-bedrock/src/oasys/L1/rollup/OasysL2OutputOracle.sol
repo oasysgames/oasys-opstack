@@ -21,20 +21,26 @@ contract OasysL2OutputOracle is L2OutputOracle {
     constructor(
         uint256 _submissionInterval,
         uint256 _l2BlockTime,
+        uint256 _startingBlockNumber,
+        uint256 _startingTimestamp,
+        address _proposer,
+        address _challenger,
         uint256 _finalizationPeriodSeconds
     )
-        L2OutputOracle(_submissionInterval, _l2BlockTime, _finalizationPeriodSeconds)
+        L2OutputOracle(
+            _submissionInterval,
+            _l2BlockTime,
+            _startingBlockNumber,
+            _startingTimestamp,
+            _proposer,
+            _challenger,
+            _finalizationPeriodSeconds
+        )
     { }
 
     /// @notice Override to pass zero value of `startingBlockNumber` and `startingTimestamp`
-    function initialize(address _proposer, address _challenger) public {
-        // pass zero value of `startingBlockNumber` and `startingTimestamp`
-        initialize(
-            0, // startingBlockNumber
-            0, // startingTimestamp
-            _proposer,
-            _challenger
-        );
+    function initialize(uint256 _startingBlockNumber, uint256 _startingTimestamp) public override {
+        super.initialize(_startingBlockNumber, _startingTimestamp);
 
         // nextIndex = startingBlockNumber;
     }

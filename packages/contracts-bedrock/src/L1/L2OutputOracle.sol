@@ -94,7 +94,7 @@ contract L2OutputOracle is Initializable, ISemver {
     /// @notice Initializer.
     /// @param _startingBlockNumber Block number for the first recoded L2 block.
     /// @param _startingTimestamp   Timestamp for the first recoded L2 block.
-    function initialize(uint256 _startingBlockNumber, uint256 _startingTimestamp) public initializer {
+    function initialize(uint256 _startingBlockNumber, uint256 _startingTimestamp) public virtual initializer {
         require(
             _startingTimestamp <= block.timestamp,
             "L2OutputOracle: starting L2 timestamp must be less than current time"
@@ -171,8 +171,9 @@ contract L2OutputOracle is Initializable, ISemver {
         bytes32 _l1BlockHash,
         uint256 _l1BlockNumber
     )
-        external
+        public
         payable
+        virtual
     {
         require(msg.sender == PROPOSER, "L2OutputOracle: only the proposer address can propose new outputs");
 
@@ -256,7 +257,7 @@ contract L2OutputOracle is Initializable, ISemver {
     ///         block.
     /// @param _l2BlockNumber L2 block number to find a checkpoint for.
     /// @return First checkpoint that commits to the given L2 block number.
-    function getL2OutputAfter(uint256 _l2BlockNumber) external view returns (Types.OutputProposal memory) {
+    function getL2OutputAfter(uint256 _l2BlockNumber) public view returns (Types.OutputProposal memory) {
         return l2Outputs[getL2OutputIndexAfter(_l2BlockNumber)];
     }
 

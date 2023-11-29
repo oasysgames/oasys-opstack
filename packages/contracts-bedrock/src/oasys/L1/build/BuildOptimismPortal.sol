@@ -16,17 +16,27 @@ contract BuildOptimismPortal is IBuildOptimismPortal, ISemver {
 
     /// @inheritdoc IBuildOptimismPortal
     function deployBytecode(
-        L2OutputOracle _l2Oracle,
+        address _l2Oracle,
         address _guardian,
-        bool _paused,
-        SystemConfig _systemConfig
+        address _systemConfig
     )
         public
         pure
         returns (bytes memory)
     {
         return abi.encodePacked(
-            type(OptimismPortal).creationCode, abi.encode(_l2Oracle, _guardian, _paused, _systemConfig)
+            type(OptimismPortal).creationCode,
+            abi.encode(
+                L2OutputOracle(_l2Oracle),
+                _guardian,
+                false, // _paused
+                SystemConfig(_systemConfig)
+            )
         );
+    }
+
+    /// @inheritdoc IBuildOptimismPortal
+    function initializeData(bool _paused) external pure returns (bytes memory) {
+        return abi.encodeCall(OptimismPortal.initialize, (_paused));
     }
 }
