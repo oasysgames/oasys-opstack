@@ -32,7 +32,14 @@ interface IL1BuildAgent {
     }
 
     /// @notice Event emitted when the L1 contract set is deployed
-    event Deployed(address owner, address proxyAdmin, address[6] proxys, address[6] impls, address batchInbox);
+    event Deployed(
+        address owner,
+        address proxyAdmin,
+        address[7] proxys,
+        address[7] impls,
+        address batchInbox,
+        address addressManager
+    );
 
     function chainSystemConfig(uint256 chainId) external view returns (address systemConfig);
 
@@ -42,5 +49,16 @@ interface IL1BuildAgent {
 
     function isUniqueChainId(uint256 chainId) external view returns (bool);
 
-    function build(uint256 chainId, BuildConfig calldata cfg) external;
+    function build(
+        uint256 chainId,
+        BuildConfig calldata cfg
+    )
+        external
+        returns (
+            address proxyAdmin,
+            address[7] memory proxys,
+            address[7] memory impls,
+            address batchInbox,
+            address addressManager
+        );
 }

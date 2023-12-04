@@ -1,0 +1,430 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import { Script } from "forge-std/Script.sol";
+import { console2 as console } from "forge-std/console2.sol";
+import { stdJson } from "forge-std/StdJson.sol";
+import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
+import { Executables } from "scripts/Executables.sol";
+import { Path } from "./_path.sol";
+
+contract Build is Script {
+    using stdJson for string;
+
+    /// @notice See: https://github.com/oasysgames/oasys-opstack/blob/develop/op-chain-ops/genesis/config.go#L36
+    struct DeployConfig {
+        // FinalSystemOwner is the owner of the system on L1. Any L1 contract that is ownable has
+        // this account set as its owner.
+        address finalSystemOwner;
+        // PortalGuardian represents the GUARDIAN account in the OptimismPortal. Has the ability to pause withdrawals.
+        address portalGuardian;
+        // L1StartingBlockTag is used to fill in the storage of the L1Block info predeploy. The rollup
+        // config script uses this to fill the L1 genesis info for the rollup. The Output oracle deploy
+        // script may use it if the L2 starting timestamp is nil, assuming the L2 genesis is set up
+        // with this.
+        bytes32 l1StartingBlockTag;
+        // L1ChainID is the chain ID of the L1 chain.
+        uint256 l1ChainID;
+        // L2ChainID is the chain ID of the L2 chain.
+        uint256 l2ChainID;
+        // L2BlockTime is the number of seconds between each L2 block.
+        uint256 l2BlockTime;
+        // Initial Gas Limit of L2 Genesis Block.
+        uint256 l2GenesisBlockGasLimit;
+        // L2 Genesis Block Initial Gas Fee.
+        uint256 l2GenesisBlockBaseFeePerGas;
+        // MaxSequencerDrift is the number of seconds after the L1 timestamp of the end of the
+        // sequencing window that batches must be included, otherwise L2 blocks including
+        // deposits are force included.
+        uint256 maxSequencerDrift;
+        // SequencerWindowSize is the number of L1 blocks per sequencing window.
+        uint256 sequencerWindowSize;
+        // ChannelTimeout is the number of L1 blocks that a frame stays valid when included in L1.
+        uint256 channelTimeout;
+        // P2PSequencerAddress is the address of the key the sequencer uses to sign blocks on the P2P layer.
+        address p2pSequencerAddress;
+        // BatchInboxAddress is the L1 account that batches are sent to.
+        address batchInboxAddress;
+        // BatchSenderAddress represents the initial sequencer account that authorizes batches.
+        // Transactions sent from this account to the batch inbox address are considered valid.
+        address batchSenderAddress;
+        // Used for calculate the next checkpoint block number, in Opstack case, 120 is set in testnet. 2s(default l2
+        // block time) * 120 = 240s. submit l2 root every 240s. it means l2->l1 withdrawal will be available every 240s.
+        // Value: 120
+        uint256 l2OutputOracleSubmissionInterval;
+        // L2OutputOracleStartingBlockNumber is the starting block number for the L2OutputOracle.
+        // Must be greater than or equal to the first Bedrock block. The first L2 output will correspond
+        // to this value plus the submission interval.
+        // TODO: considering to remove the following parameters.
+        uint256 l2OutputOracleStartingBlockNumber;
+        // L2OutputOracleStartingTimestamp is the starting timestamp for the L2OutputOracle.
+        // MUST be the same as the timestamp of the L2OO start block.
+        // TODO: considering to remove the following parameters.
+        uint256 l2OutputOracleStartingTimestamp;
+        // L2OutputOracleProposer is the address of the account that proposes L2 outputs.
+        address l2OutputOracleProposer;
+        // L2OutputOracleChallenger is the address of the account that challenges L2 outputs.
+        address l2OutputOracleChallenger;
+        // The amount of time that must pass for an output proposal to be considered canonical. Once this time past,
+        // anybody can delete l2 root.
+        // Value: 7 days
+        uint256 finalizationPeriodSeconds;
+        // ProxyAdminOwner represents the owner of the ProxyAdmin predeploy on L2.
+        address proxyAdminOwner;
+        // BaseFeeVaultRecipient represents the recipient of fees accumulated in the BaseFeeVault.
+        // Can be an account on L1 or L2, depending on the BaseFeeVaultWithdrawalNetwork value.
+        address baseFeeVaultRecipient;
+        // L1FeeVaultRecipient represents the recipient of fees accumulated in the L1FeeVault.
+        // Can be an account on L1 or L2, depending on the L1FeeVaultWithdrawalNetwork value.
+        address l1FeeVaultRecipient;
+        // SequencerFeeVaultRecipient represents the recipient of fees accumulated in the SequencerFeeVault.
+        // Can be an account on L1 or L2, depending on the SequencerFeeVaultWithdrawalNetwork value.
+        address sequencerFeeVaultRecipient;
+        // BaseFeeVaultMinimumWithdrawalAmount represents the minimum withdrawal amount for the BaseFeeVault.
+        uint256 baseFeeVaultMinimumWithdrawalAmount;
+        // L1FeeVaultMinimumWithdrawalAmount represents the minimum withdrawal amount for the L1FeeVault.
+        uint256 l1FeeVaultMinimumWithdrawalAmount;
+        // SequencerFeeVaultMinimumWithdrawalAmount represents the minimum withdrawal amount for the SequencerFeeVault.
+        uint256 sequencerFeeVaultMinimumWithdrawalAmount;
+        // BaseFeeVaultWithdrawalNetwork represents the withdrawal network for the BaseFeeVault.
+        uint256 baseFeeVaultWithdrawalNetwork;
+        // L1FeeVaultWithdrawalNetwork represents the withdrawal network for the L1FeeVault.
+        uint256 l1FeeVaultWithdrawalNetwork;
+        // SequencerFeeVaultWithdrawalNetwork represents the withdrawal network for the SequencerFeeVault.
+        uint256 sequencerFeeVaultWithdrawalNetwork;
+        // GasPriceOracleOverhead represents the initial value of the gas overhead in the GasPriceOracle predeploy.
+        uint256 gasPriceOracleOverhead;
+        // GasPriceOracleScalar represents the initial value of the gas scalar in the GasPriceOracle predeploy.
+        uint256 gasPriceOracleScalar;
+        // EnableGovernance configures whether or not include governance token predeploy.
+        bool enableGovernance;
+        // GovernanceTokenSymbol represents the  ERC20 symbol of the GovernanceToken.
+        string governanceTokenSymbol;
+        // GovernanceTokenName represents the ERC20 name of the GovernanceToken
+        string governanceTokenName;
+        // GovernanceTokenOwner represents the owner of the GovernanceToken. Has the ability
+        // to mint and burn tokens.
+        address governanceTokenOwner;
+        // L2GenesisRegolithTimeOffset is the number of seconds after genesis block that Regolith hard fork activates.
+        // Set it to 0 to activate at genesis. Nil to disable Regolith.
+        uint256 l2GenesisRegolithTimeOffset;
+        // EIP1559Denominator is the denominator of EIP1559 base fee market.
+        uint256 eip1559Denominator;
+        // EIP1559DenominatorCanyon is the denominator of EIP1559 base fee market when Canyon is active.
+        uint256 eip1559DenominatorCanyon;
+        // EIP1559Elasticity is the elasticity of the EIP1559 fee market.
+        uint256 eip1559Elasticity;
+        // SystemConfigStartBlock represents the block at which the op-node should start syncing
+        // from. It is an override to set this value on legacy networks where it is not set by
+        // default. It can be removed once all networks have this value set in their storage.
+        uint256 systemConfigStartBlock;
+        // RequiredProtocolVersion indicates the protocol version that
+        // nodes are required to adopt, to stay in sync with the network.
+        bytes32 requiredProtocolVersion;
+        // RequiredProtocolVersion indicates the protocol version that
+        // nodes are recommended to adopt, to stay in sync with the network.
+        bytes32 recommendedProtocolVersion;
+        // L1StandardBridgeProxy represents the address of the L1StandardBridgeProxy on L1 and is used
+        // as part of building the L2 genesis state.
+        address l1StandardBridgeProxy;
+        // L1CrossDomainMessengerProxy represents the address of the L1CrossDomainMessengerProxy on L1 and is used
+        // as part of building the L2 genesis state.
+        address l1CrossDomainMessengerProxy;
+        // L1ERC721BridgeProxy represents the address of the L1ERC721Bridge on L1 and is used
+        // as part of building the L2 genesis state.
+        address l1ERC721BridgeProxy;
+        // SystemConfigProxy represents the address of the SystemConfigProxy on L1 and is used
+        address systemConfigProxy;
+        // OptimismPortalProxy represents the address of the OptimismPortalProxy on L1 and is used
+        // as part of the derivation pipeline.
+        address optimismPortalProxy;
+        // L1BlockTime is the number of seconds between each L1 block.
+        uint256 l1BlockTime;
+    }
+
+    /// @notice Contracts Deployed on L1
+    struct DeployedContract {
+        address proxyAdmin;
+        address optimismPortalProxy;
+        address l2OutputOracleProxy;
+        address systemConfigProxy;
+        address l1CrossDomainMessengerProxy;
+        address l1StandardBridgeProxy;
+        address l1ERC721BridgeProxy;
+        address protocolVersions;
+        address addressManager;
+        address batchInbox;
+    }
+
+    DeployConfig deployCfg;
+    IL1BuildAgent.BuildConfig buildCfg;
+    IL1BuildAgent agent;
+
+    function setUp() public {
+        // read build parameters from environment variables.
+        address finalSystemOwner = vm.envAddress("FINAL_SYSTEM_OWNER");
+        address p2pSequencer = vm.envAddress("P2P_SEQUENCER");
+        address l2ooChallenger = vm.envAddress("L2OO_CHALLENGER");
+        address l2ooProposer = vm.envAddress("L2OO_PROPOSER");
+        address batchSender = vm.envAddress("BATCH_SENDER");
+        uint256 l2ChainId = vm.envUint("L2_CHAIN_ID");
+        uint256 l1BlockTime = vm.envUint("L1_BLOCK_TIME");
+        uint256 l2BlockTime = vm.envUint("L2_BLOCK_TIME");
+        uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
+
+        // construct a deployment configuration.
+        deployCfg = DeployConfig({
+            finalSystemOwner: finalSystemOwner,
+            portalGuardian: finalSystemOwner,
+            // ----
+            l1StartingBlockTag: blockhash(block.number - 1),
+            // ----
+            l1ChainID: block.chainid,
+            l2ChainID: l2ChainId,
+            l2BlockTime: l2BlockTime,
+            l1BlockTime: l1BlockTime,
+            // ----
+            maxSequencerDrift: 600,
+            sequencerWindowSize: 3_600,
+            channelTimeout: 300,
+            // ----
+            p2pSequencerAddress: p2pSequencer,
+            batchSenderAddress: batchSender,
+            // ----
+            l2OutputOracleSubmissionInterval: 120,
+            l2OutputOracleStartingBlockNumber: 0, // TODO: Operational L2 should set the latest block number.
+            l2OutputOracleStartingTimestamp: block.timestamp,
+            // ----
+            l2OutputOracleProposer: l2ooProposer,
+            l2OutputOracleChallenger: l2ooChallenger,
+            // ----
+            finalizationPeriodSeconds: finalizationPeriodSeconds,
+            // ----
+            proxyAdminOwner: finalSystemOwner,
+            baseFeeVaultRecipient: finalSystemOwner,
+            l1FeeVaultRecipient: finalSystemOwner,
+            sequencerFeeVaultRecipient: finalSystemOwner,
+            // ----
+            baseFeeVaultMinimumWithdrawalAmount: 10 ether,
+            l1FeeVaultMinimumWithdrawalAmount: 10 ether,
+            sequencerFeeVaultMinimumWithdrawalAmount: 10 ether,
+            baseFeeVaultWithdrawalNetwork: 0,
+            l1FeeVaultWithdrawalNetwork: 0,
+            sequencerFeeVaultWithdrawalNetwork: 0,
+            // ----
+            gasPriceOracleOverhead: 2_100, // TODO: OP Mainnet is 188
+            gasPriceOracleScalar: 1_000_000, // TODO: OP Mainnet is 684000
+            // TODO: No need?
+            enableGovernance: true,
+            governanceTokenSymbol: "OP",
+            governanceTokenName: "Optimism",
+            governanceTokenOwner: finalSystemOwner,
+            // ----
+            l2GenesisBlockGasLimit: 30_000_000,
+            l2GenesisBlockBaseFeePerGas: 0, // TODO: gasless
+            l2GenesisRegolithTimeOffset: 0,
+            // ----
+            eip1559Denominator: 50,
+            eip1559DenominatorCanyon: 250, // TODO: OP Mainnet is not set.
+            eip1559Elasticity: 10, // TODO: OP Mainnet is 6.
+            // ----
+            systemConfigStartBlock: 0,
+            // ----
+            requiredProtocolVersion: bytes32(0), // TODO: OP Mainnet is not zero.
+            recommendedProtocolVersion: bytes32(0), // TODO: OP Mainnet is not zero.
+            // set later.
+            batchInboxAddress: address(0),
+            l1StandardBridgeProxy: address(0),
+            l1CrossDomainMessengerProxy: address(0),
+            l1ERC721BridgeProxy: address(0),
+            systemConfigProxy: address(0),
+            optimismPortalProxy: address(0)
+        });
+
+        // construct a build configuration.
+        buildCfg = IL1BuildAgent.BuildConfig({
+            finalSystemOwner: deployCfg.finalSystemOwner,
+            l2OutputOracleProposer: deployCfg.l2OutputOracleProposer,
+            l2OutputOracleChallenger: deployCfg.l2OutputOracleChallenger,
+            batchSenderAddress: deployCfg.batchSenderAddress,
+            l2BlockTime: deployCfg.l2BlockTime,
+            l2OutputOracleSubmissionInterval: deployCfg.l2OutputOracleSubmissionInterval,
+            finalizationPeriodSeconds: deployCfg.finalizationPeriodSeconds,
+            l2OutputOracleStartingBlockNumber: deployCfg.l2OutputOracleStartingBlockNumber,
+            l2OutputOracleStartingTimestamp: deployCfg.l2OutputOracleStartingTimestamp
+        });
+
+        // create a directory for output files.
+        vm.createDir({ path: Path.buildLatestOutDir(), recursive: true });
+        vm.createDir({ path: Path.buildRunOutDir(), recursive: true });
+
+        // read the L1BuildAgent address, which has been deployed on L1, from the output directory.
+        agent = _readDeployedL1BuildAgent();
+        console.log("L1BuildAgent: %s", address(agent));
+    }
+
+    function run() public {
+        // build L2.
+        vm.startBroadcast();
+        (address proxyAdmin, address[7] memory proxys,, address batchInbox, address addressManager) =
+            agent.build(deployCfg.l2ChainID, buildCfg);
+        vm.stopBroadcast();
+
+        // set deployed addresses
+        deployCfg.optimismPortalProxy = proxys[0];
+        deployCfg.systemConfigProxy = proxys[2];
+        deployCfg.l1CrossDomainMessengerProxy = proxys[3];
+        deployCfg.l1StandardBridgeProxy = proxys[4];
+        deployCfg.l1ERC721BridgeProxy = proxys[5];
+        deployCfg.batchInboxAddress = batchInbox;
+        address protocolVersions = proxys[6];
+        address l2OutputOracleProxy = proxys[1];
+
+        // output opstack configuration files.
+        string memory deployCfgJson = _deployConfigJson("DeployConfig");
+        string memory addressesJson =
+            _addressesJson("deployed", proxyAdmin, l2OutputOracleProxy, addressManager, protocolVersions);
+
+        // output to the `./tmp/L1BuildAgent/Build/latest` directory
+        _writeJson(deployCfgJson, Path.buildLatestOutDir(), "/deploy-config.json");
+        _writeJson(addressesJson, Path.buildLatestOutDir(), "/addresses.json");
+
+        // output to the `./tmp/L1BuildAgent/Build/run-{L1_BLOCK_NUM}` directory
+        _writeJson(deployCfgJson, Path.buildRunOutDir(), "/deploy-config.json");
+        _writeJson(addressesJson, Path.buildRunOutDir(), "/addresses.json");
+    }
+
+    function _readDeployedL1BuildAgent() internal view returns (IL1BuildAgent) {
+        string memory json = vm.readFile(Path.deployLatestOutPath());
+        return IL1BuildAgent(stdJson.readAddress(json, "$.L1BuildAgent"));
+    }
+
+    function _writeJson(string memory json, string memory dir, string memory file) internal {
+        string memory path = string.concat(dir, file);
+        json.write(path);
+
+        console.log("Output: %s", path);
+    }
+
+    function _toHexWithoutZeroPadding(uint256 u) internal returns (string memory) {
+        if (u == 0) {
+            return "0x0";
+        }
+
+        string[] memory cmd = new string[](3);
+        cmd[0] = Executables.bash;
+        cmd[1] = "-c";
+        cmd[2] = string.concat(
+            Executables.echo, " ", vm.toString(bytes32(u)), " | ", Executables.sed, " 's/^0x0\\{0,64\\}/0x/g'"
+        );
+
+        bytes memory result = vm.ffi(cmd);
+        if (result.length % 2 == 0) {
+            return vm.toString(result);
+        }
+        return string(result);
+    }
+
+    function _deployConfigJson(string memory json) internal returns (string memory) {
+        json.serialize("finalSystemOwner", deployCfg.finalSystemOwner);
+        json.serialize("portalGuardian", deployCfg.portalGuardian);
+
+        json.serialize("l1StartingBlockTag", deployCfg.l1StartingBlockTag);
+
+        json.serialize("l1ChainID", deployCfg.l1ChainID);
+        json.serialize("l2ChainID", deployCfg.l2ChainID);
+        json.serialize("l2BlockTime", deployCfg.l2BlockTime);
+        json.serialize("l1BlockTime", deployCfg.l1BlockTime);
+
+        json.serialize("maxSequencerDrift", deployCfg.maxSequencerDrift);
+        json.serialize("sequencerWindowSize", deployCfg.sequencerWindowSize);
+        json.serialize("channelTimeout", deployCfg.channelTimeout);
+
+        json.serialize("p2pSequencerAddress", deployCfg.p2pSequencerAddress);
+        json.serialize("batchInboxAddress", deployCfg.batchInboxAddress);
+        json.serialize("batchSenderAddress", deployCfg.batchSenderAddress);
+
+        json.serialize("l2OutputOracleSubmissionInterval", deployCfg.l2OutputOracleSubmissionInterval);
+        json.serialize("l2OutputOracleStartingBlockNumber", deployCfg.l2OutputOracleStartingBlockNumber);
+        json.serialize("l2OutputOracleStartingTimestamp", deployCfg.l2OutputOracleStartingTimestamp);
+
+        json.serialize("l2OutputOracleProposer", deployCfg.l2OutputOracleProposer);
+        json.serialize("l2OutputOracleChallenger", deployCfg.l2OutputOracleChallenger);
+
+        json.serialize("finalizationPeriodSeconds", deployCfg.finalizationPeriodSeconds);
+
+        json.serialize("proxyAdminOwner", deployCfg.proxyAdminOwner);
+        json.serialize("baseFeeVaultRecipient", deployCfg.baseFeeVaultRecipient);
+        json.serialize("l1FeeVaultRecipient", deployCfg.l1FeeVaultRecipient);
+        json.serialize("sequencerFeeVaultRecipient", deployCfg.sequencerFeeVaultRecipient);
+
+        json.serialize(
+            "baseFeeVaultMinimumWithdrawalAmount",
+            _toHexWithoutZeroPadding(deployCfg.baseFeeVaultMinimumWithdrawalAmount)
+        );
+        json.serialize(
+            "l1FeeVaultMinimumWithdrawalAmount", _toHexWithoutZeroPadding(deployCfg.l1FeeVaultMinimumWithdrawalAmount)
+        );
+        json.serialize(
+            "sequencerFeeVaultMinimumWithdrawalAmount",
+            _toHexWithoutZeroPadding(deployCfg.sequencerFeeVaultMinimumWithdrawalAmount)
+        );
+        json.serialize("baseFeeVaultWithdrawalNetwork", deployCfg.baseFeeVaultWithdrawalNetwork);
+        json.serialize("l1FeeVaultWithdrawalNetwork", deployCfg.l1FeeVaultWithdrawalNetwork);
+        json.serialize("sequencerFeeVaultWithdrawalNetwork", deployCfg.sequencerFeeVaultWithdrawalNetwork);
+
+        json.serialize("gasPriceOracleOverhead", deployCfg.gasPriceOracleOverhead);
+        json.serialize("gasPriceOracleScalar", deployCfg.gasPriceOracleScalar);
+
+        json.serialize("enableGovernance", deployCfg.enableGovernance);
+        json.serialize("governanceTokenSymbol", deployCfg.governanceTokenSymbol);
+        json.serialize("governanceTokenName", deployCfg.governanceTokenName);
+        json.serialize("governanceTokenOwner", deployCfg.governanceTokenOwner);
+
+        json.serialize("l2GenesisBlockGasLimit", _toHexWithoutZeroPadding(deployCfg.l2GenesisBlockGasLimit));
+        json.serialize("l2GenesisBlockBaseFeePerGas", _toHexWithoutZeroPadding(deployCfg.l2GenesisBlockBaseFeePerGas));
+        json.serialize("l2GenesisRegolithTimeOffset", _toHexWithoutZeroPadding(deployCfg.l2GenesisRegolithTimeOffset));
+
+        json.serialize("eip1559Denominator", deployCfg.eip1559Denominator);
+        json.serialize("eip1559DenominatorCanyon", deployCfg.eip1559DenominatorCanyon);
+        json.serialize("eip1559Elasticity", deployCfg.eip1559Elasticity);
+
+        json.serialize("systemConfigStartBlock", deployCfg.systemConfigStartBlock);
+
+        json.serialize("requiredProtocolVersion", deployCfg.requiredProtocolVersion);
+        json.serialize("recommendedProtocolVersion", deployCfg.recommendedProtocolVersion);
+
+        json.serialize("l1StandardBridgeProxy", deployCfg.l1StandardBridgeProxy);
+        json.serialize("l1CrossDomainMessengerProxy", deployCfg.l1CrossDomainMessengerProxy);
+        json.serialize("l1ERC721BridgeProxy", deployCfg.l1ERC721BridgeProxy);
+        json.serialize("systemConfigProxy", deployCfg.systemConfigProxy);
+        return json.serialize("optimismPortalProxy", deployCfg.optimismPortalProxy);
+    }
+
+    function _addressesJson(
+        string memory json,
+        address proxyAdmin,
+        address l2OutputOracleProxy,
+        address addressManager,
+        address protocolVersions
+    )
+        internal
+        returns (string memory)
+    {
+        json.serialize("FinalSystemOwner", deployCfg.finalSystemOwner);
+        json.serialize("P2PSequencer", deployCfg.p2pSequencerAddress);
+        json.serialize("L2OutputOracleProposer", deployCfg.l2OutputOracleProposer);
+        json.serialize("L2OutputOracleChallenger", deployCfg.l2OutputOracleChallenger);
+        json.serialize("BatchSender", deployCfg.batchSenderAddress);
+        json.serialize("ProxyAdmin", proxyAdmin);
+        json.serialize("L2OutputOracleProxy", l2OutputOracleProxy);
+        json.serialize("AddressManager", addressManager);
+        json.serialize("ProtocolVersions", protocolVersions);
+        json.serialize("SystemConfigProxy", deployCfg.systemConfigProxy);
+        json.serialize("BatchInbox", deployCfg.batchInboxAddress);
+        json.serialize("OptimismPortalProxy", deployCfg.optimismPortalProxy);
+        json.serialize("L1CrossDomainMessengerProxy", deployCfg.l1CrossDomainMessengerProxy);
+        json.serialize("L1StandardBridgeProxy", deployCfg.l1StandardBridgeProxy);
+        return json.serialize("L1ERC721BridgeProxy", deployCfg.l1ERC721BridgeProxy);
+    }
+}
