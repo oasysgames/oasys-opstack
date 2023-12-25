@@ -215,6 +215,9 @@ type DeployConfig struct {
 
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *uint64 `json:"l1CancunTimeOffset,omitempty"`
+
+	// The timestamp for enabling the L2 zero-fee mode.
+	L2ZeroFeeTime *uint64 `json:"l2ZeroFeeTime,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
