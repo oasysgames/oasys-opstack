@@ -40,6 +40,11 @@ func NewL2Genesis(config *DeployConfig, block *types.Block) (*core.Genesis, erro
 		eip1559Elasticity = 10
 	}
 
+	var zeroFeeTimes []uint64
+	if config.L2ZeroFeeTime != nil {
+		zeroFeeTimes = append(zeroFeeTimes, *config.L2ZeroFeeTime)
+	}
+
 	optimismChainConfig := params.ChainConfig{
 		ChainID:                       new(big.Int).SetUint64(config.L2ChainID),
 		HomesteadBlock:                big.NewInt(0),
@@ -65,6 +70,7 @@ func NewL2Genesis(config *DeployConfig, block *types.Block) (*core.Genesis, erro
 		CanyonTime:                    config.CanyonTime(block.Time()),
 		ShanghaiTime:                  config.CanyonTime(block.Time()),
 		CancunTime:                    nil, // no Dencun on L2 yet.
+		ZeroFeeTimes:                  zeroFeeTimes,
 		Optimism: &params.OptimismConfig{
 			EIP1559Denominator:       eip1559Denom,
 			EIP1559Elasticity:        eip1559Elasticity,

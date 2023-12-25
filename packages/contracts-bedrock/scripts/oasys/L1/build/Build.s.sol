@@ -140,6 +140,8 @@ contract Build is Script {
         address optimismPortalProxy;
         // L1BlockTime is the number of seconds between each L1 block.
         uint256 l1BlockTime;
+        // The timestamp for enabling the L2 zero-fee mode.
+        uint256 l2ZeroFeeTime;
     }
 
     /// @notice Contracts Deployed on L1
@@ -171,6 +173,7 @@ contract Build is Script {
         uint256 l1BlockTime = vm.envUint("L1_BLOCK_TIME");
         uint256 l2BlockTime = vm.envUint("L2_BLOCK_TIME");
         uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
+        uint256 l2ZeroFeeTime = vm.envOr("ENABLE_L2_ZERO_FEE", false) ? block.timestamp : 0;
 
         // construct a deployment configuration.
         deployCfg = DeployConfig({
@@ -232,6 +235,8 @@ contract Build is Script {
             // ----
             requiredProtocolVersion: bytes32(0), // TODO: OP Mainnet is not zero.
             recommendedProtocolVersion: bytes32(0), // TODO: OP Mainnet is not zero.
+            // ----
+            l2ZeroFeeTime: l2ZeroFeeTime,
             // set later.
             batchInboxAddress: address(0),
             l1StandardBridgeProxy: address(0),
@@ -325,7 +330,7 @@ contract Build is Script {
         return string(result);
     }
 
-    function _deployConfigJson(string memory json) internal returns (string memory) {
+    function _deployConfigJson(string memory json) internal returns (string memory out) {
         json.serialize("finalSystemOwner", deployCfg.finalSystemOwner);
         json.serialize("portalGuardian", deployCfg.portalGuardian);
 
@@ -398,7 +403,11 @@ contract Build is Script {
         json.serialize("l1CrossDomainMessengerProxy", deployCfg.l1CrossDomainMessengerProxy);
         json.serialize("l1ERC721BridgeProxy", deployCfg.l1ERC721BridgeProxy);
         json.serialize("systemConfigProxy", deployCfg.systemConfigProxy);
-        return json.serialize("optimismPortalProxy", deployCfg.optimismPortalProxy);
+        out = json.serialize("optimismPortalProxy", deployCfg.optimismPortalProxy);
+        if (deployCfg.l2ZeroFeeTime > 0) {
+            out = json.serialize("l2ZeroFeeTime", deployCfg.l2ZeroFeeTime);
+        }
+        return out;
     }
 
     function _addressesJson(
