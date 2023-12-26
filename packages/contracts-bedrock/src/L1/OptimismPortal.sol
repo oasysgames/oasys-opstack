@@ -118,7 +118,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     }
 
     /// @notice Initializer.
-    function initialize(bool _paused) public initializer {
+    function initialize(bool _paused) public virtual initializer {
         l2Sender = Constants.DEFAULT_L2_SENDER;
         paused = _paused;
         __ResourceMetering_init();
@@ -421,7 +421,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     ///         the provided block timestamp.
     /// @param _timestamp Timestamp to check.
     /// @return Whether or not the finalization period has elapsed.
-    function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view returns (bool) {
+    function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view virtual returns (bool) {
         return block.timestamp > _timestamp + L2_ORACLE.FINALIZATION_PERIOD_SECONDS();
     }
 }

@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
-import { Lib_OVMCodec } from "src/oasys/L1/build/legacy/Lib_OVMCodec.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Constants } from "src/libraries/Constants.sol";
+import { Types } from "src/libraries/Types.sol";
+import { Hashing } from "src/libraries/Hashing.sol";
 import { PredeployAddresses } from "src/oasys/L1/build/legacy/PredeployAddresses.sol";
+import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
+import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOracle.sol";
 
 /// @custom:proxied
 /// @title OasysL2OutputOracle
 /// @notice Extend the OptimismPortal to controll L2 timestamp and block number
-contract OasysL2OutputOracle is L2OutputOracle {
-    /// @notice Assign fresh number due to oasys custom logic
-    /// @custom:semver 1.0.0
-    // string public constant version = "1.0.0";
+contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle, Ownable {
+    /// @notice Signature submitters allowed for instant veriﬁcation.
+    mapping(address => bool) public submitters;
 
-    uint256 public nextIndex;
-
-    event StateBatchVerified(uint256 indexed _batchIndex, bytes32 _batchRoot);
-    event StateBatchFailed(uint256 indexed _batchIndex, bytes32 _batchRoot);
+    /// @notice Next L2Output index to verify.
+    uint256 public nextVerifyIndex;
 
     constructor(
         uint256 _submissionInterval,
@@ -38,66 +39,140 @@ contract OasysL2OutputOracle is L2OutputOracle {
         )
     { }
 
-    /// @notice Override to pass zero value of `startingBlockNumber` and `startingTimestamp`
-    function initialize(uint256 _startingBlockNumber, uint256 _startingTimestamp) public override {
-        super.initialize(_startingBlockNumber, _startingTimestamp);
+    /// @notice Initializer.
+    /// @param _owner               The address for managing signature submitters.
+    /// @param _startingBlockNumber Block number for the first recoded L2 block.
+    /// @param _startingTimestamp   Timestamp for the first recoded L2 block.
+    function initialize(address _owner, uint256 _startingBlockNumber, uint256 _startingTimestamp) public {
+        require(_owner != address(0), "OasysL2OutputOracle: owner is the zero address");
 
-        // nextIndex = startingBlockNumber;
+        super.initialize(_startingBlockNumber, _startingTimestamp);
+        _transferOwnership(_owner);
     }
 
-    /// @notice Overrite to compute l2 block number and timestamp when the first l2 block is submitted
-    function proposeL2Output(
-        bytes32 _outputRoot,
-        uint256 _l2BlockNumber,
-        bytes32 _l1BlockHash,
-        uint256 _l1BlockNumber
+    /// @inheritdoc IOasysL2OutputOracle
+    function succeedVerification(
+        address submitter,
+        uint256 l2OutputIndex,
+        Types.OutputProposal calldata l2Output
     )
-        public
-        payable
-        override
+        external
     {
-        // compute l2 block number and timestamp when the first l2 block is submitted
-        if (latestBlockNumber() == 0) {
-            startingBlockNumber = _l2BlockNumber - SUBMISSION_INTERVAL;
-            startingTimestamp = block.timestamp - L2_BLOCK_TIME * SUBMISSION_INTERVAL - 1;
-            nextIndex = startingBlockNumber;
+        _checkCallerAndSubmitter(submitter);
+
+        require(_isValidL2Output(l2OutputIndex, l2Output), "OasysL2OutputOracle: invalid output root");
+
+        require(l2OutputIndex == nextVerifyIndex, "OasysL2OutputOracle: invalid L2 output index");
+
+        nextVerifyIndex++;
+
+        emit OutputVerified(l2OutputIndex, l2Output.outputRoot, l2Output.l2BlockNumber);
+    }
+
+    /// @inheritdoc IOasysL2OutputOracle
+    function failVerification(
+        address submitter,
+        uint256 l2OutputIndex,
+        Types.OutputProposal calldata l2Output
+    )
+        external
+    {
+        _checkCallerAndSubmitter(submitter);
+
+        require(_isValidL2Output(l2OutputIndex, l2Output), "OasysL2OutputOracle: invalid output root");
+
+        _deleteL2Outputs(l2OutputIndex);
+
+        emit OutputFailed(l2OutputIndex, l2Output.outputRoot, l2Output.l2BlockNumber);
+    }
+
+    /// @inheritdoc L2OutputOracle
+    function deleteL2Outputs(uint256 l2OutputIndex) external override {
+        require(msg.sender == CHALLENGER, "OasysL2OutputOracle: only the challenger address can delete outputs");
+
+        _deleteL2Outputs(l2OutputIndex);
+    }
+
+    /// @inheritdoc IOasysL2OutputOracle
+    function allowSubmitter(address submitter) external onlyOwner {
+        require(submitters[submitter] == false, "OasysL2OutputOracle: already allowed");
+
+        submitters[submitter] = true;
+
+        emit SubmitterAllowed(submitter);
+    }
+
+    /// @inheritdoc IOasysL2OutputOracle
+    function revokeSubmitter(address submitter) external onlyOwner {
+        require(submitters[submitter] == true, "OasysL2OutputOracle: not allowed");
+
+        submitters[submitter] = false;
+
+        emit SubmitterRevoked(submitter);
+    }
+
+    /// @inheritdoc IOasysL2OutputOracle
+    function verifiedBlockNumber() external view returns (uint256) {
+        return nextVerifyIndex * SUBMISSION_INTERVAL;
+    }
+
+    /// @inheritdoc IOasysL2OutputOracle
+    function verifiedL1Timestamp() external view returns (uint128) {
+        return nextVerifyIndex == 0 ? 0 : l2Outputs[nextVerifyIndex - 1].timestamp;
+    }
+
+    /// @inheritdoc IOasysL2OutputOracle
+    function isOutputFinalized(uint256 l2OutputIndex) external view returns (bool) {
+        return _isOutputFinalized(l2OutputIndex);
+    }
+
+    function _deleteL2Outputs(uint256 l2OutputIndex) internal {
+        // Make sure we're not *increasing* the length of the array.
+        require(
+            l2OutputIndex < l2Outputs.length, "OasysL2OutputOracle: cannot delete outputs after the latest output index"
+        );
+
+        require(
+            _isOutputFinalized(l2OutputIndex) == false,
+            "OasysL2OutputOracle: cannot delete outputs that have already been finalized"
+        );
+
+        uint256 prevNextL2OutputIndex = nextOutputIndex();
+
+        // Use assembly to delete the array elements because Solidity doesn't allow it.
+        assembly {
+            sstore(l2Outputs.slot, l2OutputIndex)
         }
 
-        super.proposeL2Output(_outputRoot, _l2BlockNumber, _l1BlockHash, _l1BlockNumber);
+        emit OutputsDeleted(prevNextL2OutputIndex, l2OutputIndex);
     }
 
-    /**
-     * Method called by the OasysStateCommitmentChainVerifier after a verification successful.
-     * @param _batchHeader Target batch header.
-     */
-    function succeedVerification(Lib_OVMCodec.ChainBatchHeader memory _batchHeader) external {
-        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "Invalid message sender.");
+    function _checkCallerAndSubmitter(address submitter) internal view {
+        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "OasysL2OutputOracle: caller is not allowed");
 
-        require(_isValidBatchHeader(_batchHeader), "Invalid batch header.");
-
-        require(_batchHeader.batchIndex == nextIndex, "Invalid batch index.");
-
-        nextIndex += SUBMISSION_INTERVAL;
-
-        emit StateBatchVerified(_batchHeader.batchIndex, _batchHeader.batchRoot);
+        require(submitters[submitter] == true, "OasysL2OutputOracle: the submitter is not allowed");
     }
 
-    /**
-     * Checks that a batch header matches the stored hash for the given index.
-     * @param _batchHeader Batch header to validate.
-     * @return Whether or not the header matches the stored one.
-     */
-    function _isValidBatchHeader(Lib_OVMCodec.ChainBatchHeader memory _batchHeader) internal view returns (bool) {
-        return _batchHeader.batchRoot == getL2OutputAfter(_batchHeader.batchIndex).outputRoot;
+    function _isValidL2Output(
+        uint256 l2OutputIndex,
+        Types.OutputProposal calldata actual
+    )
+        internal
+        view
+        returns (bool)
+    {
+        Types.OutputProposal memory expect = l2Outputs[l2OutputIndex];
+        return keccak256(abi.encodePacked(actual.outputRoot, actual.timestamp, actual.l2BlockNumber))
+            == keccak256(abi.encodePacked(expect.outputRoot, expect.timestamp, expect.l2BlockNumber));
     }
 
-    //     // /// @notice Returns the L2 timestamp corresponding to a given L2 block number.
-    //     // /// @param _l2BlockNumber The L2 block number of the target block.
-    //     // /// @return L2 timestamp of the given block.
-    //     // function computeL2Timestamp(uint256 _l2BlockNumber) public override view returns (uint256) {
-    //     //     if (l2Outputs.length == 0) {
-    //     //         return 0;
-    //     //     }
-    //     //     return l2Outputs[l2Outputs.length - 1].timestamp - SUBMISSION_INTERVAL*L2_BLOCK_TIME
-    //     // }
+    function _isOutputFinalized(uint256 l2OutputIndex) internal view returns (bool) {
+        if (l2OutputIndex < nextVerifyIndex) {
+            return true;
+        }
+        if (block.timestamp - l2Outputs[l2OutputIndex].timestamp > FINALIZATION_PERIOD_SECONDS) {
+            return true;
+        }
+        return false;
+    }
 }
