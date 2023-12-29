@@ -202,7 +202,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         Types.OutputRootProof calldata _outputRootProof,
         bytes[] calldata _withdrawalProof
     )
-        external
+        public
         whenNotPaused
     {
         // Prevent users from creating a deposit transaction where this address is the message

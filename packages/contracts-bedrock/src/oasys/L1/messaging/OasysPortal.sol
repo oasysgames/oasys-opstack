@@ -45,20 +45,27 @@ contract OasysPortal is OptimismPortal {
         emit RelayerSet(newRelayer);
     }
 
-    /// @notice Finalizes a withdrawal transaction.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx) external override whenNotPaused {
-        _finalizeWithdrawalTransaction(_tx);
-    }
-
-    /// @notice Finalizes withdrawal transactions.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction[] memory txs) external whenNotPaused {
+    /// @notice Proves withdrawal transactions.
+    function proveWithdrawalTransaction(
+        Types.WithdrawalTransaction[] calldata txs,
+        uint256[] calldata l2OutputIndexes,
+        Types.OutputRootProof[] calldata outputRootProofs,
+        bytes[][] calldata withdrawalProofs
+    )
+        external
+    {
         uint256 length = txs.length;
+        require(length == l2OutputIndexes.length, "OasysPortal: array lengths must be equal");
+        require(length == outputRootProofs.length, "OasysPortal: array lengths must be equal");
+        require(length == withdrawalProofs.length, "OasysPortal: array lengths must be equal");
+
         for (uint256 i = 0; i < length; i++) {
-            _finalizeWithdrawalTransaction(txs[i]);
+            proveWithdrawalTransaction(txs[i], l2OutputIndexes[i], outputRootProofs[i], withdrawalProofs[i]);
         }
     }
 
-    function _finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx) internal {
+    /// @notice Finalizes a withdrawal transaction.
+    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction calldata _tx) public override whenNotPaused {
         // Make sure that the l2Sender has not yet been set. The l2Sender is set to a value other
         // than the default value when a withdrawal transaction is being finalized. This check is
         // a defacto reentrancy guard.
@@ -141,6 +148,14 @@ contract OasysPortal is OptimismPortal {
         // be sufficient to execute the sub call.
         if (success == false && tx.origin == Constants.ESTIMATION_ADDRESS) {
             revert("OasysPortal: withdrawal failed");
+        }
+    }
+
+    /// @notice Finalizes withdrawal transactions.
+    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction[] calldata txs) external {
+        uint256 length = txs.length;
+        for (uint256 i = 0; i < length; i++) {
+            finalizeWithdrawalTransaction(txs[i]);
         }
     }
 
