@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Constants } from "src/libraries/Constants.sol";
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
@@ -12,10 +11,7 @@ import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOrac
 /// @custom:proxied
 /// @title OasysL2OutputOracle
 /// @notice Extend the OptimismPortal to controll L2 timestamp and block number
-contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle, Ownable {
-    /// @notice Signature submitters allowed for instant veriﬁcation.
-    mapping(address => bool) public submitters;
-
+contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
     /// @notice Next L2Output index to verify.
     uint256 public nextVerifyIndex;
 
@@ -40,25 +36,15 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle, Ownable {
     { }
 
     /// @notice Initializer.
-    /// @param _owner               The address for managing signature submitters.
     /// @param _startingBlockNumber Block number for the first recoded L2 block.
     /// @param _startingTimestamp   Timestamp for the first recoded L2 block.
-    function initialize(address _owner, uint256 _startingBlockNumber, uint256 _startingTimestamp) public {
-        require(_owner != address(0), "OasysL2OutputOracle: owner is the zero address");
-
+    function initialize(uint256 _startingBlockNumber, uint256 _startingTimestamp) public override {
         super.initialize(_startingBlockNumber, _startingTimestamp);
-        _transferOwnership(_owner);
     }
 
     /// @inheritdoc IOasysL2OutputOracle
-    function succeedVerification(
-        address submitter,
-        uint256 l2OutputIndex,
-        Types.OutputProposal calldata l2Output
-    )
-        external
-    {
-        _checkCallerAndSubmitter(submitter);
+    function succeedVerification(uint256 l2OutputIndex, Types.OutputProposal calldata l2Output) external {
+        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "OasysL2OutputOracle: caller is not allowed");
 
         require(_isValidL2Output(l2OutputIndex, l2Output), "OasysL2OutputOracle: invalid output root");
 
@@ -70,14 +56,8 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle, Ownable {
     }
 
     /// @inheritdoc IOasysL2OutputOracle
-    function failVerification(
-        address submitter,
-        uint256 l2OutputIndex,
-        Types.OutputProposal calldata l2Output
-    )
-        external
-    {
-        _checkCallerAndSubmitter(submitter);
+    function failVerification(uint256 l2OutputIndex, Types.OutputProposal calldata l2Output) external {
+        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "OasysL2OutputOracle: caller is not allowed");
 
         require(_isValidL2Output(l2OutputIndex, l2Output), "OasysL2OutputOracle: invalid output root");
 
@@ -91,24 +71,6 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle, Ownable {
         require(msg.sender == CHALLENGER, "OasysL2OutputOracle: only the challenger address can delete outputs");
 
         _deleteL2Outputs(l2OutputIndex);
-    }
-
-    /// @inheritdoc IOasysL2OutputOracle
-    function allowSubmitter(address submitter) external onlyOwner {
-        require(submitters[submitter] == false, "OasysL2OutputOracle: already allowed");
-
-        submitters[submitter] = true;
-
-        emit SubmitterAllowed(submitter);
-    }
-
-    /// @inheritdoc IOasysL2OutputOracle
-    function revokeSubmitter(address submitter) external onlyOwner {
-        require(submitters[submitter] == true, "OasysL2OutputOracle: not allowed");
-
-        submitters[submitter] = false;
-
-        emit SubmitterRevoked(submitter);
     }
 
     /// @inheritdoc IOasysL2OutputOracle
@@ -145,12 +107,6 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle, Ownable {
         }
 
         emit OutputsDeleted(prevNextL2OutputIndex, l2OutputIndex);
-    }
-
-    function _checkCallerAndSubmitter(address submitter) internal view {
-        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "OasysL2OutputOracle: caller is not allowed");
-
-        require(submitters[submitter] == true, "OasysL2OutputOracle: the submitter is not allowed");
     }
 
     function _isValidL2Output(
