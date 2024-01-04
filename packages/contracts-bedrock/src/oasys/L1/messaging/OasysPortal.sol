@@ -15,11 +15,11 @@ import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOrac
 /// @notice The OasysPortal is TODO
 contract OasysPortal is OptimismPortal {
     /// @notice Message relayer to allowed immediate withdraw.
-    address public relayer;
+    address public messageRelayer;
 
-    /// @notice Emitted when a new relayer is set.
-    /// @param relayer The address of the new relayer.
-    event RelayerSet(address indexed relayer);
+    /// @notice Emitted when a new message relayer is set.
+    /// @param relayer The address of the new message relayer.
+    event MessageRelayerSet(address indexed relayer);
 
     constructor(
         L2OutputOracle _l2Oracle,
@@ -35,37 +35,18 @@ contract OasysPortal is OptimismPortal {
         super.initialize(_paused);
     }
 
-    /// @notice Set a new relayer address.
+    /// @notice Set a new message relayer address.
     ///         If the zero address is set, no immediate relay of withdrawal messages.
-    function setRelayer(address newRelayer) external {
-        require(msg.sender == GUARDIAN, "OasysPortal: only guardian can set a new relayer");
-        require(newRelayer != relayer, "OasysPortal: already set");
+    function setMessageRelayer(address newRelayer) external {
+        require(msg.sender == GUARDIAN, "OasysPortal: only guardian can set a new message relayer");
+        require(newRelayer != messageRelayer, "OasysPortal: already set");
 
-        relayer = newRelayer;
-        emit RelayerSet(newRelayer);
-    }
-
-    /// @notice Proves withdrawal transactions.
-    function proveWithdrawalTransaction(
-        Types.WithdrawalTransaction[] calldata txs,
-        uint256[] calldata l2OutputIndexes,
-        Types.OutputRootProof[] calldata outputRootProofs,
-        bytes[][] calldata withdrawalProofs
-    )
-        external
-    {
-        uint256 length = txs.length;
-        require(length == l2OutputIndexes.length, "OasysPortal: array lengths must be equal");
-        require(length == outputRootProofs.length, "OasysPortal: array lengths must be equal");
-        require(length == withdrawalProofs.length, "OasysPortal: array lengths must be equal");
-
-        for (uint256 i = 0; i < length; i++) {
-            proveWithdrawalTransaction(txs[i], l2OutputIndexes[i], outputRootProofs[i], withdrawalProofs[i]);
-        }
+        messageRelayer = newRelayer;
+        emit MessageRelayerSet(newRelayer);
     }
 
     /// @notice Finalizes a withdrawal transaction.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction calldata _tx) public override whenNotPaused {
+    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction calldata _tx) external override whenNotPaused {
         // Make sure that the l2Sender has not yet been set. The l2Sender is set to a value other
         // than the default value when a withdrawal transaction is being finalized. This check is
         // a defacto reentrancy guard.
@@ -88,12 +69,12 @@ contract OasysPortal is OptimismPortal {
             "OasysPortal: withdrawal timestamp less than L2 Oracle starting timestamp"
         );
 
-        // If the caller is not an relayer,
+        // If the caller is not an message relayer,
         // a proven withdrawal must wait at least the finalization period before it can be
         // finalized. This waiting period can elapse in parallel with the waiting period for the
         // output the withdrawal was proven against. In effect, this means that the minimum
         // withdrawal time is proposal submission time + finalization period.
-        if (msg.sender != relayer) {
+        if (msg.sender != messageRelayer) {
             require(
                 super._isFinalizationPeriodElapsed(provenWithdrawal.timestamp),
                 "OasysPortal: proven withdrawal finalization period has not elapsed"
@@ -148,14 +129,6 @@ contract OasysPortal is OptimismPortal {
         // be sufficient to execute the sub call.
         if (success == false && tx.origin == Constants.ESTIMATION_ADDRESS) {
             revert("OasysPortal: withdrawal failed");
-        }
-    }
-
-    /// @notice Finalizes withdrawal transactions.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction[] calldata txs) external {
-        uint256 length = txs.length;
-        for (uint256 i = 0; i < length; i++) {
-            finalizeWithdrawalTransaction(txs[i]);
         }
     }
 
