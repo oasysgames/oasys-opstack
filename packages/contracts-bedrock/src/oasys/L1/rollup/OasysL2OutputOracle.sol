@@ -74,11 +74,6 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
     }
 
     /// @inheritdoc IOasysL2OutputOracle
-    function verifiedBlockNumber() external view returns (uint256) {
-        return nextVerifyIndex * SUBMISSION_INTERVAL;
-    }
-
-    /// @inheritdoc IOasysL2OutputOracle
     function verifiedL1Timestamp() external view returns (uint128) {
         return nextVerifyIndex == 0 ? 0 : l2Outputs[nextVerifyIndex - 1].timestamp;
     }

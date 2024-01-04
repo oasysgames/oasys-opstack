@@ -30,9 +30,6 @@ interface IOasysL2OutputOracle {
     /// @param l2Output      Target L2 Output.
     function failVerification(uint256 l2OutputIndex, Types.OutputProposal calldata l2Output) external;
 
-    /// @notice Return the verified block number in L2.
-    function verifiedBlockNumber() external view returns (uint256);
-
     /// @notice Return the verified block timestamp in L1.
     function verifiedL1Timestamp() external view returns (uint128);
 
