@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-interface IBuildL2OutputOracle {
+interface IBuildOasysL2OutputOracle {
     /// @notice The create2 salt used for deployment of the contract implementations.
     /// @param _submissionInterval  Interval in blocks at which checkpoints must be submitted.
     /// @param _l2BlockTime         The time per L2 block, in seconds.
