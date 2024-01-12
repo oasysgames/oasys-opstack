@@ -46,7 +46,7 @@ contract OasysPortal is OptimismPortal {
     }
 
     /// @notice Finalizes a withdrawal transaction.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction calldata _tx) external override whenNotPaused {
+    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction calldata _tx) public override whenNotPaused {
         // Make sure that the l2Sender has not yet been set. The l2Sender is set to a value other
         // than the default value when a withdrawal transaction is being finalized. This check is
         // a defacto reentrancy guard.
@@ -129,6 +129,33 @@ contract OasysPortal is OptimismPortal {
         // be sufficient to execute the sub call.
         if (success == false && tx.origin == Constants.ESTIMATION_ADDRESS) {
             revert("OasysPortal: withdrawal failed");
+        }
+    }
+
+    /// @notice Batch proves withdrawal transaction.
+    function proveWithdrawalTransactions(
+        Types.WithdrawalTransaction[] calldata _txs,
+        uint256[] calldata _l2OutputIndexes,
+        Types.OutputRootProof[] calldata _outputRootProofs,
+        bytes[][] calldata _withdrawalProofs
+    )
+        external
+    {
+        uint256 length = _txs.length;
+        require(length == _l2OutputIndexes.length, "OasysPortal: array lengths must be equal");
+        require(length == _outputRootProofs.length, "OasysPortal: array lengths must be equal");
+        require(length == _withdrawalProofs.length, "OasysPortal: array lengths must be equal");
+
+        for (uint256 i = 0; i < length; i++) {
+            proveWithdrawalTransaction(_txs[i], _l2OutputIndexes[i], _outputRootProofs[i], _withdrawalProofs[i]);
+        }
+    }
+
+    /// @notice Batch finalizes withdrawal transactions.
+    function finalizeWithdrawalTransactions(Types.WithdrawalTransaction[] calldata _txs) external {
+        uint256 length = _txs.length;
+        for (uint256 i = 0; i < length; i++) {
+            finalizeWithdrawalTransaction(_txs[i]);
         }
     }
 
