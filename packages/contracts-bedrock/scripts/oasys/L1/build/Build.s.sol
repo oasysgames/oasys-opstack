@@ -172,6 +172,7 @@ contract Build is Script {
         uint256 l2ChainId = vm.envUint("L2_CHAIN_ID");
         uint256 l1BlockTime = vm.envUint("L1_BLOCK_TIME");
         uint256 l2BlockTime = vm.envUint("L2_BLOCK_TIME");
+        uint256 l2GasLimit = vm.envUint("L2_GAS_LIMIT");
         uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
         uint256 l2ZeroFeeTime = vm.envOr("ENABLE_L2_ZERO_FEE", false) ? block.timestamp : 0;
 
@@ -223,7 +224,7 @@ contract Build is Script {
             governanceTokenName: "Optimism",
             governanceTokenOwner: finalSystemOwner,
             // ----
-            l2GenesisBlockGasLimit: 30_000_000,
+            l2GenesisBlockGasLimit: l2GasLimit,
             l2GenesisBlockBaseFeePerGas: 0, // TODO: gasless
             l2GenesisRegolithTimeOffset: 0,
             // ----
@@ -253,6 +254,7 @@ contract Build is Script {
             l2OutputOracleChallenger: deployCfg.l2OutputOracleChallenger,
             batchSenderAddress: deployCfg.batchSenderAddress,
             l2BlockTime: deployCfg.l2BlockTime,
+            l2GasLimit: uint64(deployCfg.l2GenesisBlockGasLimit),
             l2OutputOracleSubmissionInterval: deployCfg.l2OutputOracleSubmissionInterval,
             finalizationPeriodSeconds: deployCfg.finalizationPeriodSeconds,
             l2OutputOracleStartingBlockNumber: deployCfg.l2OutputOracleStartingBlockNumber,
