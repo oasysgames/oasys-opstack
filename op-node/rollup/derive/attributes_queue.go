@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -81,9 +82,12 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 		return nil, NewResetError(fmt.Errorf("valid batch has bad parent hash %s, expected %s", batch.ParentHash, l2SafeHead.Hash))
 	}
 	// sanity check timestamp
-	if expected := l2SafeHead.Time + aq.config.BlockTime; expected != batch.Timestamp {
-		return nil, NewResetError(fmt.Errorf("valid batch has bad timestamp %d, expected %d", batch.Timestamp, expected))
+	if expected := l2SafeHead.Time + aq.config.BlockTime; batch.Timestamp != expected && batch.Timestamp != l2SafeHead.Time {
+		return nil, NewResetError(fmt.Errorf("valid batch has bad timestamp %d, expected %d, %d", batch.Timestamp, expected, l2SafeHead.Time))
 	}
+	// if expected := l2SafeHead.Time + aq.config.BlockTime; expected != batch.Timestamp {
+	// 	return nil, NewResetError(fmt.Errorf("valid batch has bad timestamp %d, expected %d", batch.Timestamp, expected))
+	// }
 	fetchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	attrs, err := aq.builder.PreparePayloadAttributes(fetchCtx, l2SafeHead, batch.Epoch())
@@ -95,6 +99,10 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 	// (that would make the block derivation non-deterministic)
 	attrs.NoTxPool = true
 	attrs.Transactions = append(attrs.Transactions, batch.Transactions...)
+
+	// Set the timestamp from the batch which is derived from the L1.
+	// The original code sets the timestamp using a calculated value based on parent block.
+	attrs.Timestamp = hexutil.Uint64(batch.Timestamp)
 
 	aq.log.Info("generated attributes in payload queue", "txs", len(attrs.Transactions), "timestamp", batch.Timestamp)
 

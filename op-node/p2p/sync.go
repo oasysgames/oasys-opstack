@@ -783,13 +783,14 @@ func (srv *ReqRespServer) handleSyncRequest(ctx context.Context, stream network.
 	if req < srv.cfg.Genesis.L2.Number {
 		return req, fmt.Errorf("cannot serve request for L2 block %d before genesis %d: %w", req, srv.cfg.Genesis.L2.Number, invalidRequestErr)
 	}
-	max, err := srv.cfg.TargetBlockNumber(uint64(time.Now().Unix()))
-	if err != nil {
-		return req, fmt.Errorf("cannot determine max target block number to verify request: %w", invalidRequestErr)
-	}
-	if req > max {
-		return req, fmt.Errorf("cannot serve request for L2 block %d after max expected block (%v): %w", req, max, invalidRequestErr)
-	}
+	// skip because block heigh is not deterministic by the time, if dynamic block time is enabled.
+	// max, err := srv.cfg.TargetBlockNumber(uint64(time.Now().Unix()))
+	// if err != nil {
+	// 	return req, fmt.Errorf("cannot determine max target block number to verify request: %w", invalidRequestErr)
+	// }
+	// if req > max {
+	// 	return req, fmt.Errorf("cannot serve request for L2 block %d after max expected block (%v): %w", req, max, invalidRequestErr)
+	// }
 
 	payload, err := srv.l2.PayloadByNumber(ctx, req)
 	if err != nil {

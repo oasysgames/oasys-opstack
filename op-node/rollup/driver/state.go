@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -215,14 +216,44 @@ func (s *Driver) eventLoop() {
 
 	sequencerTimer := time.NewTimer(0)
 	var sequencerCh <-chan time.Time
+	// TODO: not thread safe
+	var delay time.Duration
 	planSequencerAction := func() {
-		delay := s.sequencer.PlanNextSequencerAction()
+		delay = s.sequencer.PlanNextSequencerAction()
 		sequencerCh = sequencerTimer.C
 		if len(sequencerCh) > 0 { // empty if not already drained before resetting
 			<-sequencerCh
 		}
 		sequencerTimer.Reset(delay)
 	}
+
+	// TODO: move this to a separate function
+	// Watch the txpool to see if there are any pending transactions
+	ticker := time.NewTicker(150 * time.Millisecond)
+	rpcclient, err := rpc.DialContext(context.Background(), "ws://op-geth:8546")
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				var result txPoolStats
+				if err := rpcclient.CallContext(context.Background(), &result, "txpool_status"); err != nil {
+					continue
+				} else {
+					if 0 < result.PendingTxs || 0 < result.QueuedTxs {
+						// notify the sequencer to build a block immediately if the delay is too long
+						if delay > 0 && delay > sealingDuration {
+							fmt.Println("notify sequencer to build a block immediately")
+							delay = 0
+							sequencerTimer.Reset(0)
+						}
+					}
+				}
+			}
+		}
+	}()
 
 	// Create a ticker to check if there is a gap in the engine queue. Whenever
 	// there is, we send requests to sync source to retrieve the missing payloads.

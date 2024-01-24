@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -45,9 +47,18 @@ type Sequencer struct {
 	timeNow func() time.Time
 
 	nextAction time.Time
+
+	// Used for watch txpool
+	l2Client *rpc.Client
 }
 
 func NewSequencer(log log.Logger, cfg *rollup.Config, engine derive.ResettableEngineControl, attributesBuilder derive.AttributesBuilder, l1OriginSelector L1OriginSelectorIface, metrics SequencerMetrics) *Sequencer {
+	// TODO: move this to a better place
+	rpcclient, err := rpc.DialContext(context.Background(), "ws://op-geth:8546")
+	if err != nil {
+		panic(err)
+	}
+
 	return &Sequencer{
 		log:              log,
 		config:           cfg,
@@ -56,6 +67,7 @@ func NewSequencer(log log.Logger, cfg *rollup.Config, engine derive.ResettableEn
 		attrBuilder:      attributesBuilder,
 		l1OriginSelector: l1OriginSelector,
 		metrics:          metrics,
+		l2Client:         rpcclient,
 	}
 }
 
@@ -121,6 +133,11 @@ func (d *Sequencer) CancelBuildingBlock(ctx context.Context) {
 	_ = d.engine.CancelPayload(ctx, true)
 }
 
+type txPoolStats struct {
+	PendingTxs hexutil.Uint `json:"pending"`
+	QueuedTxs  hexutil.Uint `json:"queued"`
+}
+
 // PlanNextSequencerAction returns a desired delay till the RunNextSequencerAction call.
 func (d *Sequencer) PlanNextSequencerAction() time.Duration {
 	// If the engine is busy building safe blocks (and thus changing the head that we would sync on top of),
@@ -129,6 +146,21 @@ func (d *Sequencer) PlanNextSequencerAction() time.Duration {
 		d.log.Warn("delaying sequencing to not interrupt safe-head changes", "onto", onto, "onto_time", onto.Time)
 		// approximates the worst-case time it takes to build a block, to reattempt sequencing after.
 		return time.Second * time.Duration(d.config.BlockTime)
+	}
+
+	// check the txpool of op-geth, if there are pending txs, no delay
+	if d.l2Client != nil {
+		var result txPoolStats
+		ctx := context.Background() // timeout is automatically set to 10s
+		if err := d.l2Client.CallContext(ctx, &result, "txpool_status"); err != nil {
+			// continue later delay determination logic
+			d.log.Warn("failed to get pending txs", "err", err)
+		} else {
+			if 0 < result.PendingTxs || 0 < result.QueuedTxs {
+				// no delay if pending tx exists
+				return 0
+			}
+		}
 	}
 
 	head := d.engine.UnsafeL2Head()

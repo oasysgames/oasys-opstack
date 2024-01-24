@@ -71,8 +71,8 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 		log.Trace("received out-of-order batch for future processing after next batch", "next_timestamp", nextTimestamp)
 		return BatchFuture
 	}
-	if batch.Timestamp < nextTimestamp {
-		log.Warn("dropping batch with old timestamp", "min_timestamp", nextTimestamp)
+	if batch.Timestamp < l2SafeHead.Time {
+		log.Warn("dropping batch with old timestamp", "min_timestamp", l2SafeHead.Time)
 		return BatchDrop
 	}
 

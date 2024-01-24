@@ -3,6 +3,7 @@ package derive
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -95,6 +96,11 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 
 	// Sanity check the L1 origin was correctly selected to maintain the time invariant between L1 and L2
 	nextL2Time := l2Parent.Time + ba.cfg.BlockTime
+	if uint64(time.Now().Unix())+ba.cfg.BlockTime < nextL2Time {
+		// Use same block time as parent, if it's in the future.
+		// Dinamic block time allow the same block time as parent
+		nextL2Time = l2Parent.Time
+	}
 	if nextL2Time < l1Info.Time() {
 		return nil, NewResetError(fmt.Errorf("cannot build L2 block on top %s for time %d before L1 origin %s at time %d",
 			l2Parent, nextL2Time, eth.ToBlockID(l1Info), l1Info.Time()))
