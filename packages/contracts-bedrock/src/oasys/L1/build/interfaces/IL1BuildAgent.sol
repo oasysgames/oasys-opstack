@@ -18,6 +18,10 @@ interface IL1BuildAgent {
         // the block time of l2 chain
         // Value: 2s
         uint256 l2BlockTime;
+        // the gas limit of l2 chain
+        // This value is stored on L1 SystemConfig contract, then referred by op-node to set the gas limit of l2 block.
+        // Value: 30000000
+        uint64 l2GasLimit;
         // Used for calculate the next checkpoint block number, in Opstack case, 120 is set in testnet. 2s(default l2
         // block time) * 120 = 240s. submit l2 root every 240s. it means l2->l1 withdrawal will be available every 240s.
         // Value: 120

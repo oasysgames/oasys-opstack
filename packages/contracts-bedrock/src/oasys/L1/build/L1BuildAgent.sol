@@ -299,10 +299,16 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
                 // This is originally `p2pSequencerAddress` which sign the block for p2p propagation
                 // Don't distinguish between sequencer and p2pSequencerAddress(=unsafeBlockSigner)
                 _unsafeBlockSigner: _cfg.l2OutputOracleProposer,
-                // Same as the OP Mainnet
-                _overhead: 188, // gasPriceOracleOverhead / TODO: Parametrize?
-                _scalar: 684_000, // gasPriceOracleScalar / TODO: Parametrize?
-                _gasLimit: 30_000_000 // l2GenesisBlockGasLimit / TODO: Parametrize?
+                // gasPriceOracleOverhead
+                // The rollup gas of L2 txs batch is calculated by the size of L2 data. This overhead is added to it.
+                // The value bellow is the same as the value of the Opstack Mainnet
+                _overhead: 188,
+                // gasPriceOracleScalar
+                // This scalar multiply the rollup gas of L2 txs batch. right after, the result is devided by 1_000_000
+                // As a result, the gas is 684_000/1_000_000 of comupted value. unknown why this is needed.
+                // The value bellow is the same as the value of the Opstack Mainnet
+                _scalar: 684_000,
+                _gasLimit: _cfg.l2GasLimit
              })
         });
     }
