@@ -154,7 +154,7 @@ contract Build is Script {
         // SystemConfigStartBlock represents the block at which the op-node should start syncing
         // from. It is an override to set this value on legacy networks where it is not set by
         // default. It can be removed once all networks have this value set in their storage.
-        // Set the same value as l2OutputOracleStartingBlockNumber
+        // Set the same height as l1StartingBlockTag.
         uint256 systemConfigStartBlock;
         // RequiredProtocolVersion indicates the protocol version that
         // nodes are required to adopt, to stay in sync with the network.
@@ -279,7 +279,7 @@ contract Build is Script {
             eip1559DenominatorCanyon: 250,
             eip1559Elasticity: 10, // OP Mainnet is 6.
             // ----
-            systemConfigStartBlock: outputOracleStartingBlockNumber,
+            systemConfigStartBlock: block.number - 1,
             // ----
             requiredProtocolVersion: bytes32(0),
             recommendedProtocolVersion: bytes32(0),
