@@ -104,7 +104,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     {
         require(isUniqueChainId(_chainId), "L1BuildAgent: already deployed");
         // msg.sender must be the builder
-        require(L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(), "deposit amount shortage");
+        require(
+            L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(), "deposit amount shortage"
+        );
 
         // temporarily set the admin to this contract
         // transfer ownership to the final system owner at the end of building
@@ -317,7 +319,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
                 // The value bellow is the same as the value of the Opstack Mainnet
                 _scalar: 684_000,
                 _gasLimit: _cfg.l2GasLimit
-             })
+            })
         });
     }
 
