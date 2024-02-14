@@ -12,6 +12,7 @@ import { ISemver } from "src/universal/ISemver.sol";
 import { Constants } from "src/libraries/Constants.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
+import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
 import { IBuildProxy } from "src/oasys/L1/build/interfaces/IBuildProxy.sol";
 import { IBuildL2OutputOracle } from "src/oasys/L1/build/interfaces/IBuildL2OutputOracle.sol";
 import { IBuildOptimismPortal } from "src/oasys/L1/build/interfaces/IBuildOptimismPortal.sol";
@@ -41,6 +42,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     /// @notice The address of the L1BuildAgentV1
     ///         Used to ensure that the chainId is unique and not duplicated.
     ILegacyL1BuildAgent public immutable LEGACY_L1_BUILD_AGENT;
+
+    /// @notice Referred to verify required deposit amount to build a Verse
+    IL1BuildDeposit public immutable L1_BUILD_DEPOSIT;
 
     /// @notice The base number to generate batch inbox address
     uint160 public constant BASE_BATCH_INBOX_ADDRESS = uint160(0xfF0000000000000000000000000000000000FF00);
@@ -72,7 +76,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         IBuildL1StandardBridge _bL1StandardBridg,
         IBuildL1ERC721Bridge _bL1ERC721Bridge,
         IBuildProtocolVersions _bProtocolVersions,
-        ILegacyL1BuildAgent _legacyL1BuildAgent
+        ILegacyL1BuildAgent _legacyL1BuildAgent,
+        IL1BuildDeposit _l1BuildDeposit
     ) {
         BUILD_PROXY = _bProxy;
         BUILD_L2OUTPUT_ORACLE = _bOutputOracle;
@@ -84,6 +89,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         BUILD_PROTOCOL_VERSIONS = _bProtocolVersions;
 
         LEGACY_L1_BUILD_AGENT = _legacyL1BuildAgent;
+        L1_BUILD_DEPOSIT = _l1BuildDeposit;
     }
 
     /// @notice Deploy the L1 contract set to build Verse, This is th main function.
@@ -97,6 +103,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         returns (address, address[7] memory, address[7] memory, address, address)
     {
         require(isUniqueChainId(_chainId), "L1BuildAgent: already deployed");
+        // msg.sender must be the builder
+        require(L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(), "deposit amount shortage");
 
         // temporarily set the admin to this contract
         // transfer ownership to the final system owner at the end of building

@@ -14,6 +14,7 @@ import { BuildOptimismPortal } from "src/oasys/L1/build/BuildOptimismPortal.sol"
 import { BuildSystemConfig } from "src/oasys/L1/build/BuildSystemConfig.sol";
 import { BuildProtocolVersions } from "src/oasys/L1/build/BuildProtocolVersions.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
+import { MockL1BuildDeposit } from "src/oasys/L1/build/legacy/MockL1BuildDeposit.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Path } from "./_path.sol";
 
@@ -75,6 +76,9 @@ contract Deploy is Script {
         address _bL1ERC721Bridge = _deploy("BuildL1ERC721Bridge", type(BuildL1ERC721Bridge).creationCode);
         address _bProtocolVersions = _deploy("BuildProtocolVersions", type(BuildProtocolVersions).creationCode);
 
+        uint256 _requiredAmount = 1 ether;
+        address _l1BuildDeposit = _deploy("MockL1BuildDeposit", abi.encodePacked(type(MockL1BuildDeposit).creationCode, abi.encode(_requiredAmount)));
+
         bytes memory creationCode = type(L1BuildAgent).creationCode;
         bytes memory constructorArgs = abi.encode(
             _bProxy,
@@ -85,7 +89,8 @@ contract Deploy is Script {
             _bL1StandardBridg,
             _bL1ERC721Bridge,
             _bProtocolVersions,
-            legacyL1BuildAgent
+            legacyL1BuildAgent,
+            _l1BuildDeposit
         );
         address agent = _deploy("L1BuildAgent", abi.encodePacked(creationCode, constructorArgs));
 
@@ -100,6 +105,7 @@ contract Deploy is Script {
         json.serialize("BuildL1StandardBridge", _bL1StandardBridg);
         json.serialize("BuildL1ERC721Bridge", _bL1ERC721Bridge);
         json.serialize("BuildProtocolVersions", _bProtocolVersions);
+        json.serialize("L1BuildDeposit", _l1BuildDeposit);
         json = json.serialize("L1BuildAgent", agent);
 
         json.write(Path.deployLatestOutPath());
