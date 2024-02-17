@@ -221,6 +221,7 @@ contract Build is Script {
         uint256 l2GasLimit = vm.envUint("L2_GAS_LIMIT");
         uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
         uint256 outputOracleStartingBlockNumber = vm.envUint("OUTPUT_ORACLE_STARTING_BLOCK_NUMBER");
+        uint256 outputOracleStartingTimestamp = vm.envUint("OUTPUT_ORACLE_STARTING_TIMESTAMP");
         uint256 l2ZeroFeeTime = vm.envOr("ENABLE_L2_ZERO_FEE", false) ? block.timestamp : 0;
 
         // construct a deployment configuration.
@@ -244,7 +245,7 @@ contract Build is Script {
             // ----
             l2OutputOracleSubmissionInterval: 120,
             l2OutputOracleStartingBlockNumber: outputOracleStartingBlockNumber,
-            l2OutputOracleStartingTimestamp: block.timestamp,
+            l2OutputOracleStartingTimestamp: outputOracleStartingTimestamp,
             // ----
             l2OutputOracleProposer: l2ooProposer,
             l2OutputOracleChallenger: l2ooChallenger,
