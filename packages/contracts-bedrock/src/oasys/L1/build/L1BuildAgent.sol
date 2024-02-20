@@ -39,12 +39,12 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     IBuildL1ERC721Bridge public immutable BUILD_L1_ERC721_BRIDGE;
     IBuildProtocolVersions public immutable BUILD_PROTOCOL_VERSIONS;
 
+    /// @notice Referred to verify required deposit amount to build a Verse
+    IL1BuildDeposit public immutable L1_BUILD_DEPOSIT;
+
     /// @notice The address of the L1BuildAgentV1
     ///         Used to ensure that the chainId is unique and not duplicated.
     ILegacyL1BuildAgent public immutable LEGACY_L1_BUILD_AGENT;
-
-    /// @notice Referred to verify required deposit amount to build a Verse
-    IL1BuildDeposit public immutable L1_BUILD_DEPOSIT;
 
     /// @notice The base number to generate batch inbox address
     uint160 public constant BASE_BATCH_INBOX_ADDRESS = uint160(0xfF0000000000000000000000000000000000FF00);
@@ -76,8 +76,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         IBuildL1StandardBridge _bL1StandardBridg,
         IBuildL1ERC721Bridge _bL1ERC721Bridge,
         IBuildProtocolVersions _bProtocolVersions,
-        ILegacyL1BuildAgent _legacyL1BuildAgent,
-        IL1BuildDeposit _l1BuildDeposit
+        IL1BuildDeposit _l1BuildDeposit,
+        ILegacyL1BuildAgent _legacyL1BuildAgent
     ) {
         BUILD_PROXY = _bProxy;
         BUILD_L2OUTPUT_ORACLE = _bOutputOracle;
@@ -88,8 +88,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         BUILD_L1_ERC721_BRIDGE = _bL1ERC721Bridge;
         BUILD_PROTOCOL_VERSIONS = _bProtocolVersions;
 
-        LEGACY_L1_BUILD_AGENT = _legacyL1BuildAgent;
         L1_BUILD_DEPOSIT = _l1BuildDeposit;
+        LEGACY_L1_BUILD_AGENT = _legacyL1BuildAgent;
     }
 
     /// @notice Deploy the L1 contract set to build Verse, This is th main function.
@@ -102,11 +102,17 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         external
         returns (address, address[7] memory, address[7] memory, address, address)
     {
-        require(isUniqueChainId(_chainId), "L1BuildAgent: already deployed");
-        // msg.sender must be the builder
-        require(
-            L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(), "deposit amount shortage"
-        );
+        // Not require to be globally unique, as the pre built L2 needs to be upgraded
+        require(_isInternallyUniqueChainId(_chainId), "L1BuildAgent: already deployed");
+        if (_requiresDepositCheck(_chainId)) {
+            require(
+                L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(), "deposit amount shortage"
+            );
+        }
+
+        // build the deposit.
+        // Mark this builder as built.
+        L1_BUILD_DEPOSIT.build(msg.sender);
 
         // temporarily set the admin to this contract
         // transfer ownership to the final system owner at the end of building
@@ -173,6 +179,20 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
     function _isInternallyUniqueChainId(uint256 _chainId) internal view returns (bool) {
         return chainSystemConfig[_chainId] == address(0);
+    }
+
+    function _requiresDepositCheck(uint256 _chainId) internal view returns (bool) {
+        // always require deposit check if no legacy build agent
+        if (LEGACY_L1_BUILD_AGENT == ILegacyL1BuildAgent(address(0))) {
+            return true;
+        }
+        // skip deposit check if the chainId is already deployed by the legacy build agent
+        // In other words, skip deposit check in the case of L2 upgrade
+        if (LEGACY_L1_BUILD_AGENT.getAddressManager(_chainId) != address(0)) {
+            return false;
+        }
+        // require deposit check if the chainId is not deployed by the legacy build agent
+        return true;
     }
 
     function _deployProxies(
