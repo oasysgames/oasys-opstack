@@ -106,7 +106,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         require(_isInternallyUniqueChainId(_chainId), "L1BuildAgent: already deployed");
         if (_requiresDepositCheck(_chainId)) {
             require(
-                L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(), "deposit amount shortage"
+                L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(),
+                "deposit amount shortage"
             );
         }
 

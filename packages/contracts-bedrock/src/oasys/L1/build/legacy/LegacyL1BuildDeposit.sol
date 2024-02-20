@@ -10,18 +10,18 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *
  *      This contract is not the same copy of legacy, the list of changes is below.
  *      - Abolished the Allowlist
- *      - Changed `requiredAmount`, `lockedBlock` and `agentAddress` as immutable to be able to access from proxy.
+ *      - Changed `requiredAmount`, `lockedBlock` and `agentAddress` as immutable to not consume slot
  *      - Set the list of allowedTokens in the initialize function as the array is prohibited to be immutable.
  *      - Change the visibility of `getDepositTotal` public to be able to access from extension contract.
  */
 contract LegacyL1BuildDeposit {
-    /**********************
+    /**
      * Contract Variables *
-     **********************/
+     */
 
     address private constant OAS = address(0);
 
-    // NOTE: immutable to be able to access from proxy
+    // NOTE: immutable to not consume slot
     uint256 public immutable requiredAmount;
     uint256 public immutable lockedBlock;
     address public immutable agentAddress;
@@ -31,41 +31,36 @@ contract LegacyL1BuildDeposit {
 
     address[] public allowedTokens;
 
-    // NOTE: change to internal
     mapping(address => uint256) private _depositTotal;
     mapping(address => mapping(address => mapping(address => uint256))) private _depositAmount;
     mapping(address => uint256) private _buildBlock;
 
-    /**********
+    /**
      * Events *
-     **********/
+     */
 
     event Deposit(address indexed builder, address depositer, address token, uint256 amount);
     event Withdrawal(address indexed builder, address depositer, address token, uint256 amount);
     event Build(address indexed builder, uint256 block);
 
-    /***************
+    /**
      * Constructor *
-     ***************/
+     */
 
     /**
      * @param _requiredAmount Required amount of token to build the Verse-Layer.
      * @param _lockedBlock Number of blocks to keep tokens locked since building the Verse-Layer
      * @param _agentAddress Address of the L1BuildAgent contract.
      */
-    constructor(
-        uint256 _requiredAmount,
-        uint256 _lockedBlock,
-        address _agentAddress
-    ) {
+    constructor(uint256 _requiredAmount, uint256 _lockedBlock, address _agentAddress) {
         requiredAmount = _requiredAmount;
         lockedBlock = _lockedBlock;
         agentAddress = _agentAddress;
     }
 
-    /********************
+    /**
      * Public Functions *
-     ********************/
+     */
 
     /**
      * @param _allowedTokens Address list of ERC20 tokens that allow deposits.
@@ -73,7 +68,9 @@ contract LegacyL1BuildDeposit {
     function initialize(
         // address agentAddress, // NOTE: set in constructor
         address[] memory _allowedTokens
-    ) external {
+    )
+        external
+    {
         require(allowedTokens.length == 0, "initialize only once");
         allowedTokens = _allowedTokens;
     }
@@ -96,11 +93,7 @@ contract LegacyL1BuildDeposit {
      * @param _token Address of the ERC20 token.
      * @param _amount Amount of the ERC20 token.
      */
-    function depositERC20(
-        address _builder,
-        address _token,
-        uint256 _amount
-    ) external {
+    function depositERC20(address _builder, address _token, uint256 _amount) external {
         require(_contains(allowedTokens, _token), "ERC20 not allowed");
 
         address depositer = msg.sender;
@@ -121,7 +114,7 @@ contract LegacyL1BuildDeposit {
         address depositer = msg.sender;
         _withdraw(_builder, depositer, OAS, _amount);
 
-        (bool success, ) = depositer.call{ value: _amount }("");
+        (bool success,) = depositer.call{ value: _amount }("");
         require(success, "OAS transfer failed");
 
         emit Withdrawal(_builder, depositer, OAS, _amount);
@@ -133,11 +126,7 @@ contract LegacyL1BuildDeposit {
      * @param _token Address of the ERC20 token.
      * @param _amount Amount of the ERC20 token.
      */
-    function withdrawERC20(
-        address _builder,
-        address _token,
-        uint256 _amount
-    ) external {
+    function withdrawERC20(address _builder, address _token, uint256 _amount) external {
         require(_contains(allowedTokens, _token), "ERC20 not allowed");
 
         address depositer = msg.sender;
@@ -178,11 +167,7 @@ contract LegacyL1BuildDeposit {
      * @param _depositer Address of the depositer.
      * @return amount Amount of the tokens by the depositer.
      */
-    function getDepositAmount(address _builder, address _depositer)
-        external
-        view
-        returns (uint256)
-    {
+    function getDepositAmount(address _builder, address _depositer) external view returns (uint256) {
         return _depositAmount[OAS][_builder][_depositer];
     }
 
@@ -197,7 +182,11 @@ contract LegacyL1BuildDeposit {
         address _builder,
         address _depositer,
         address _token
-    ) external view returns (uint256) {
+    )
+        external
+        view
+        returns (uint256)
+    {
         return _depositAmount[_token][_builder][_depositer];
     }
 
@@ -210,16 +199,11 @@ contract LegacyL1BuildDeposit {
         return _buildBlock[_builder];
     }
 
-    /**********************
+    /**
      * Internal Functions *
-     **********************/
+     */
 
-    function _deposit(
-        address _builder,
-        address _depositer,
-        address _token,
-        uint256 _amount
-    ) internal {
+    function _deposit(address _builder, address _depositer, address _token, uint256 _amount) internal {
         require(_builder != address(0), "builder is zero address");
         // NOTE: no more need to check allowlistAddress
         // require(IAllowlist(allowlistAddress).containsAddress(_builder), "builder not allowed");
@@ -230,21 +214,13 @@ contract LegacyL1BuildDeposit {
         _depositAmount[_token][_builder][_depositer] += _amount;
     }
 
-    function _withdraw(
-        address _builder,
-        address _depositer,
-        address _token,
-        uint256 _amount
-    ) internal {
+    function _withdraw(address _builder, address _depositer, address _token, uint256 _amount) internal {
         require(_builder != address(0), "builder is zero address");
         require(_amount > 0, "amount is zero");
 
         uint256 buildBlock = _buildBlock[_builder];
         require(buildBlock == 0 || buildBlock + lockedBlock < block.number, "while locked");
-        require(
-            _depositAmount[_token][_builder][_depositer] >= _amount,
-            "your deposit amount shortage"
-        );
+        require(_depositAmount[_token][_builder][_depositer] >= _amount, "your deposit amount shortage");
 
         _depositTotal[_builder] -= _amount;
         _depositAmount[_token][_builder][_depositer] -= _amount;

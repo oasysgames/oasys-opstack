@@ -20,7 +20,9 @@ contract L1BuildDeposit is ISemver, LegacyL1BuildDeposit {
         uint256 _lockedBlock,
         address _agentAddress,
         IL1BuildDeposit _legacyL1BuildDeposit
-    ) LegacyL1BuildDeposit(_requiredAmount, _lockedBlock, _agentAddress) {
+    )
+        LegacyL1BuildDeposit(_requiredAmount, _lockedBlock, _agentAddress)
+    {
         legacyL1BuildDeposit = _legacyL1BuildDeposit;
     }
 

@@ -82,7 +82,18 @@ contract Deploy is Script {
 
         (address pAgent, address pDeposit) = _deployProxies();
         _initL1BuildDeposit(pDeposit, pAgent);
-        _initL1BuildAgent(pAgent, _bProxy, _bOutputOracle, _bOptimismPortal, _bL1Messenger, _bSystemConfig, _bL1StandardBridg, _bL1ERC721Bridge, _bProtocolVersions, pDeposit);
+        _initL1BuildAgent(
+            pAgent,
+            _bProxy,
+            _bOutputOracle,
+            _bOptimismPortal,
+            _bL1Messenger,
+            _bSystemConfig,
+            _bL1StandardBridg,
+            _bL1ERC721Bridge,
+            _bProtocolVersions,
+            pDeposit
+        );
 
         vm.stopBroadcast();
 
@@ -110,14 +121,20 @@ contract Deploy is Script {
         pcc.create(0, salt, deployBytecode, deployment, contractName);
     }
 
-    function _deployWithCustomSalt(string memory contractName, bytes memory deployBytecode, bytes32 _salt) internal returns (address deployment) {
+    function _deployWithCustomSalt(
+        string memory contractName,
+        bytes memory deployBytecode,
+        bytes32 _salt
+    )
+        internal
+        returns (address deployment)
+    {
         deployment = pcc.getDeploymentAddress(_salt, deployBytecode);
         pcc.create(0, _salt, deployBytecode, deployment, contractName);
     }
 
-
     // Deploy proxies for L1BuildDeposit and L1BuildAgent
-    function _deployProxies() internal returns (address, address){
+    function _deployProxies() internal returns (address, address) {
         // Authorized to upgrade L1BuildAgent and L1BuildDeposit
         address admin = msg.sender;
         address pAgent = _deployWithCustomSalt(
@@ -135,12 +152,18 @@ contract Deploy is Script {
 
     function _initL1BuildDeposit(address pDeposit, address agent) internal {
         // Deploy L1BuildDeposit
-        address deposit = _deploy("L1BuildDeposit", abi.encodePacked(type(L1BuildDeposit).creationCode, abi.encode(
-            1 ether, // requiredAmount,
-            100, // lockedBlock,
-            agent,
-            legacyL1BuildDeposit
-        )));
+        address deposit = _deploy(
+            "L1BuildDeposit",
+            abi.encodePacked(
+                type(L1BuildDeposit).creationCode,
+                abi.encode(
+                    1 ether, // requiredAmount,
+                    100, // lockedBlock,
+                    agent,
+                    legacyL1BuildDeposit
+                )
+            )
+        );
 
         // Set implementation of L1BuildDeposit
         address[] memory addresses = new address[](1);
@@ -160,7 +183,9 @@ contract Deploy is Script {
         address _bL1ERC721Bridge,
         address _bProtocolVersions,
         address deposit
-    ) internal {
+    )
+        internal
+    {
         bytes memory creationCode = type(L1BuildAgent).creationCode;
         bytes memory constructorArgs = abi.encode(
             _bProxy,

@@ -12,7 +12,8 @@ import { Path } from "./_path.sol";
 contract Build is Script {
     using stdJson for string;
 
-    /// @notice See: https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/config.go
+    /// @notice See:
+    /// https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/config.go
     struct DeployConfig {
         // FinalSystemOwner is the owner of the system on L1. Any L1 contract that is ownable has
         // this account set as its owner.
