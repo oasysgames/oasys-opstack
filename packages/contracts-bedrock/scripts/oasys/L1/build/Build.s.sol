@@ -220,6 +220,7 @@ contract Build is Script {
         uint256 l2BlockTime = vm.envUint("L2_BLOCK_TIME");
         uint256 l2GasLimit = vm.envUint("L2_GAS_LIMIT");
         uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
+        uint256 outputOracleSubmissionInterval = vm.envUint("OUTPUT_ORACLE_SUBMISSION_INTERVAL");
         uint256 outputOracleStartingBlockNumber = vm.envUint("OUTPUT_ORACLE_STARTING_BLOCK_NUMBER");
         uint256 outputOracleStartingTimestamp = vm.envUint("OUTPUT_ORACLE_STARTING_TIMESTAMP");
         uint256 l2ZeroFeeTime = vm.envOr("ENABLE_L2_ZERO_FEE", false) ? block.timestamp : 0;
@@ -243,7 +244,7 @@ contract Build is Script {
             p2pSequencerAddress: p2pSequencer,
             batchSenderAddress: batchSender,
             // ----
-            l2OutputOracleSubmissionInterval: 120,
+            l2OutputOracleSubmissionInterval: outputOracleSubmissionInterval,
             l2OutputOracleStartingBlockNumber: outputOracleStartingBlockNumber,
             l2OutputOracleStartingTimestamp: outputOracleStartingTimestamp,
             // ----
