@@ -68,7 +68,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     bool public paused;
 
     /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
-    uint256[50] private __gap;
+    uint256[46] private __gap;
 
     /// @notice Emitted when a transaction is deposited from L1 to L2.
     ///         The parameters of this event are read by the rollup node and used to derive deposit
