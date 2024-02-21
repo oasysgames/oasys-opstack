@@ -10,7 +10,8 @@ import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOrac
 
 /// @custom:proxied
 /// @title OasysL2OutputOracle
-/// @notice Extend the OptimismPortal to controll L2 timestamp and block number
+/// @notice The OasysL2OutputOracle is a contract that extends
+///         L2OutputOracle to enable instant verification.
 contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
     /// @notice Next L2Output index to verify.
     uint256 public nextVerifyIndex;

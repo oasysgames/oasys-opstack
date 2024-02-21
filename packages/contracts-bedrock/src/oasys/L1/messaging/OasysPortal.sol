@@ -12,7 +12,8 @@ import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOrac
 
 /// @custom:proxied
 /// @title OasysPortal
-/// @notice The OasysPortal is TODO
+/// @notice The OasysPortal is a contract that extends
+///         OptimismPortal to enable fast messaging from L2 to L1.
 contract OasysPortal is OptimismPortal {
     /// @notice Message relayer to allowed immediate withdraw.
     address public messageRelayer;
