@@ -64,8 +64,6 @@ contract OasysPortal is OptimismPortal {
     /// @return Whether or not the finalization period has elapsed.
     function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view override returns (bool) {
         if (messageRelayer != address(0) && msg.sender == messageRelayer) {
-            // Note: If called with `eth_call`, this code block
-            //       will not pass because `msg.sender` is fixed at zero address.
             uint256 verified = IOasysL2OutputOracle(address(L2_ORACLE)).verifiedL1Timestamp();
             if (verified > _timestamp) {
                 return true;
