@@ -45,6 +45,9 @@ contract L2OutputOracle is Initializable, ISemver {
     /// @notice An array of L2 output proposals.
     Types.OutputProposal[] internal l2Outputs;
 
+    /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
+    uint256[50] private __gap;
+
     /// @notice Emitted when an output is proposed.
     /// @param outputRoot    The output root.
     /// @param l2OutputIndex The index of the output in the l2Outputs array.
