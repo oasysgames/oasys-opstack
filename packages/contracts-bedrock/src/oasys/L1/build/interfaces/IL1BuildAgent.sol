@@ -18,16 +18,28 @@ interface IL1BuildAgent {
         // the block time of l2 chain
         // Value: 2s
         uint256 l2BlockTime;
+        // the gas limit of l2 chain
+        // This value is stored on L1 SystemConfig contract, then referred by op-node to set the gas limit of l2 block.
+        // Value: 30000000
+        uint64 l2GasLimit;
         // Used for calculate the next checkpoint block number, in Opstack case, 120 is set in testnet. 2s(default l2
         // block time) * 120 = 240s. submit l2 root every 240s. it means l2->l1 withdrawal will be available every 240s.
         // Value: 120
         uint256 l2OutputOracleSubmissionInterval;
-        // The amount of time that must pass for an output proposal to be considered canonical. Once this time past,
-        // anybody can delete l2 root.
+        // FinalizationPeriodSeconds represents the number of seconds before an output is considered
+        // finalized. This impacts the amount of time that withdrawals take to finalize and is
+        // generally set to 1 week.
         // Value: 7 days
         uint256 finalizationPeriodSeconds;
-        /// ------ considering to remove the following parameters ------
+        // L2OutputOracleStartingBlockNumber is the starting block number for the L2OutputOracle.
+        // Must be greater than or equal to the first Bedrock block. The first L2 output will correspond
+        // to this value plus the submission interval.
+        // Set 0, if building from the genesis block. (no data migration)
+        // Set the last block number +1, if building from the last block. (with data migration)
         uint256 l2OutputOracleStartingBlockNumber;
+        // L2OutputOracleStartingTimestamp is the starting timestamp for the L2OutputOracle.
+        // MUST be the same as the timestamp of the L2OO start block.
+        // Set runtime block timestamp during the build process.
         uint256 l2OutputOracleStartingTimestamp;
     }
 

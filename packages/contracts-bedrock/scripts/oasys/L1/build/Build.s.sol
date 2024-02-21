@@ -11,17 +11,22 @@ import { Path } from "./_path.sol";
 contract Build is Script {
     using stdJson for string;
 
-    /// @notice See: https://github.com/oasysgames/oasys-opstack/blob/develop/op-chain-ops/genesis/config.go#L36
+    /// @notice See: https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/config.go
     struct DeployConfig {
         // FinalSystemOwner is the owner of the system on L1. Any L1 contract that is ownable has
         // this account set as its owner.
         address finalSystemOwner;
         // PortalGuardian represents the GUARDIAN account in the OptimismPortal. Has the ability to pause withdrawals.
+        // Set the same value as the finalSystemOwner.
         address portalGuardian;
         // L1StartingBlockTag is used to fill in the storage of the L1Block info predeploy. The rollup
         // config script uses this to fill the L1 genesis info for the rollup. The Output oracle deploy
         // script may use it if the L2 starting timestamp is nil, assuming the L2 genesis is set up
         // with this.
+        // Set the block hash of latest - 1.
+        // To be accurate, it's preferable to set the latest block hash.
+        // However, the hash of the latest block cannot be determined during runtime,
+        // necessitating the use of the previous block's hash.
         bytes32 l1StartingBlockTag;
         // L1ChainID is the chain ID of the L1 chain.
         uint256 l1ChainID;
@@ -30,20 +35,26 @@ contract Build is Script {
         // L2BlockTime is the number of seconds between each L2 block.
         uint256 l2BlockTime;
         // Initial Gas Limit of L2 Genesis Block.
+        // Set the same value as the L2 block gas limit.
         uint256 l2GenesisBlockGasLimit;
         // L2 Genesis Block Initial Gas Fee.
+        // Set 0 to keep the gas fee zero.
         uint256 l2GenesisBlockBaseFeePerGas;
         // MaxSequencerDrift is the number of seconds after the L1 timestamp of the end of the
         // sequencing window that batches must be included, otherwise L2 blocks including
         // deposits are force included.
+        // Set the same value as opstack mainnet.
         uint256 maxSequencerDrift;
         // SequencerWindowSize is the number of L1 blocks per sequencing window.
+        // Set the same value as opstack mainnet.
         uint256 sequencerWindowSize;
         // ChannelTimeout is the number of L1 blocks that a frame stays valid when included in L1.
+        // Set the same value as opstack mainnet.
         uint256 channelTimeout;
         // P2PSequencerAddress is the address of the key the sequencer uses to sign blocks on the P2P layer.
         address p2pSequencerAddress;
         // BatchInboxAddress is the L1 account that batches are sent to.
+        // The unique address is generated during the build process.
         address batchInboxAddress;
         // BatchSenderAddress represents the initial sequencer account that authorizes batches.
         // Transactions sent from this account to the batch inbox address are considered valid.
@@ -55,48 +66,66 @@ contract Build is Script {
         // L2OutputOracleStartingBlockNumber is the starting block number for the L2OutputOracle.
         // Must be greater than or equal to the first Bedrock block. The first L2 output will correspond
         // to this value plus the submission interval.
-        // TODO: considering to remove the following parameters.
+        // Set 0, if building from the genesis block. (no data migration)
+        // Set the last block number +1, if building from the last block. (with data migration)
         uint256 l2OutputOracleStartingBlockNumber;
         // L2OutputOracleStartingTimestamp is the starting timestamp for the L2OutputOracle.
         // MUST be the same as the timestamp of the L2OO start block.
-        // TODO: considering to remove the following parameters.
+        // Set runtime block timestamp during the build process.
         uint256 l2OutputOracleStartingTimestamp;
         // L2OutputOracleProposer is the address of the account that proposes L2 outputs.
         address l2OutputOracleProposer;
         // L2OutputOracleChallenger is the address of the account that challenges L2 outputs.
         address l2OutputOracleChallenger;
-        // The amount of time that must pass for an output proposal to be considered canonical. Once this time past,
-        // anybody can delete l2 root.
-        // Value: 7 days
+        // FinalizationPeriodSeconds represents the number of seconds before an output is considered
+        // finalized. This impacts the amount of time that withdrawals take to finalize and is
+        // generally set to 1 week.
         uint256 finalizationPeriodSeconds;
         // ProxyAdminOwner represents the owner of the ProxyAdmin predeploy on L2.
+        // Set the same value as the finalSystemOwner.
         address proxyAdminOwner;
         // BaseFeeVaultRecipient represents the recipient of fees accumulated in the BaseFeeVault.
         // Can be an account on L1 or L2, depending on the BaseFeeVaultWithdrawalNetwork value.
+        // Set the same value as the finalSystemOwner.
         address baseFeeVaultRecipient;
         // L1FeeVaultRecipient represents the recipient of fees accumulated in the L1FeeVault.
         // Can be an account on L1 or L2, depending on the L1FeeVaultWithdrawalNetwork value.
+        // Set the same value as the finalSystemOwner.
         address l1FeeVaultRecipient;
         // SequencerFeeVaultRecipient represents the recipient of fees accumulated in the SequencerFeeVault.
         // Can be an account on L1 or L2, depending on the SequencerFeeVaultWithdrawalNetwork value.
+        // Set the same value as the finalSystemOwner.
         address sequencerFeeVaultRecipient;
         // BaseFeeVaultMinimumWithdrawalAmount represents the minimum withdrawal amount for the BaseFeeVault.
+        // Set as 10 ether.
         uint256 baseFeeVaultMinimumWithdrawalAmount;
         // L1FeeVaultMinimumWithdrawalAmount represents the minimum withdrawal amount for the L1FeeVault.
+        // Set as 10 ether.
         uint256 l1FeeVaultMinimumWithdrawalAmount;
         // SequencerFeeVaultMinimumWithdrawalAmount represents the minimum withdrawal amount for the SequencerFeeVault.
+        // Set as 10 ether.
         uint256 sequencerFeeVaultMinimumWithdrawalAmount;
         // BaseFeeVaultWithdrawalNetwork represents the withdrawal network for the BaseFeeVault.
+        // can only be 0 (L1) or 1 (L2)
+        // Set 0 as same as opstack mainnet.
         uint256 baseFeeVaultWithdrawalNetwork;
         // L1FeeVaultWithdrawalNetwork represents the withdrawal network for the L1FeeVault.
+        // can only be 0 (L1) or 1 (L2)
+        // Set 0 as same as opstack mainnet.
         uint256 l1FeeVaultWithdrawalNetwork;
         // SequencerFeeVaultWithdrawalNetwork represents the withdrawal network for the SequencerFeeVault.
+        // can only be 0 (L1) or 1 (L2)
+        // Set 0 as same as opstack mainnet.
         uint256 sequencerFeeVaultWithdrawalNetwork;
         // GasPriceOracleOverhead represents the initial value of the gas overhead in the GasPriceOracle predeploy.
+        // Set the same value as opstack mainnet.
         uint256 gasPriceOracleOverhead;
         // GasPriceOracleScalar represents the initial value of the gas scalar in the GasPriceOracle predeploy.
+        // Set the same value as opstack mainnet.
         uint256 gasPriceOracleScalar;
         // EnableGovernance configures whether or not include governance token predeploy.
+        // Set false, if you doesn't need governance token or migrate from the old network.
+        // Set true, if you need governance token.
         bool enableGovernance;
         // GovernanceTokenSymbol represents the  ERC20 symbol of the GovernanceToken.
         string governanceTokenSymbol;
@@ -109,34 +138,51 @@ contract Build is Script {
         // Set it to 0 to activate at genesis. Nil to disable Regolith.
         uint256 l2GenesisRegolithTimeOffset;
         // EIP1559Denominator is the denominator of EIP1559 base fee market.
+        // Set the default value of op-chain-ops/genesis/genesis.go
+        // https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/genesis.go#L32
         uint256 eip1559Denominator;
         // EIP1559DenominatorCanyon is the denominator of EIP1559 base fee market when Canyon is active.
+        // The opstack mainnet activated Canyon at 1704992401 (Thu, 2024-01-11 at 17:00:01 UTC)
+        // https://docs.optimism.io/builders/node-operators/network-upgrades/overview
+        // Set the default value of op-chain-ops/genesis/genesis.go
+        // https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/genesis.go#L36
         uint256 eip1559DenominatorCanyon;
         // EIP1559Elasticity is the elasticity of the EIP1559 fee market.
+        // Set the default value of op-chain-ops/genesis/genesis.go
+        // https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/genesis.go#L40
         uint256 eip1559Elasticity;
         // SystemConfigStartBlock represents the block at which the op-node should start syncing
         // from. It is an override to set this value on legacy networks where it is not set by
         // default. It can be removed once all networks have this value set in their storage.
+        // Set the same height as l1StartingBlockTag.
         uint256 systemConfigStartBlock;
         // RequiredProtocolVersion indicates the protocol version that
         // nodes are required to adopt, to stay in sync with the network.
+        // used to manage superchain protocol version information.
+        // Set 0, as we don't support superchain yet.
         bytes32 requiredProtocolVersion;
         // RequiredProtocolVersion indicates the protocol version that
         // nodes are recommended to adopt, to stay in sync with the network.
+        // Set 0, as we don't support superchain yet.
         bytes32 recommendedProtocolVersion;
         // L1StandardBridgeProxy represents the address of the L1StandardBridgeProxy on L1 and is used
         // as part of building the L2 genesis state.
+        // Automatically set during the build process.
         address l1StandardBridgeProxy;
         // L1CrossDomainMessengerProxy represents the address of the L1CrossDomainMessengerProxy on L1 and is used
         // as part of building the L2 genesis state.
+        // Automatically set during the build process.
         address l1CrossDomainMessengerProxy;
         // L1ERC721BridgeProxy represents the address of the L1ERC721Bridge on L1 and is used
         // as part of building the L2 genesis state.
+        // Automatically set during the build process.
         address l1ERC721BridgeProxy;
         // SystemConfigProxy represents the address of the SystemConfigProxy on L1 and is used
+        // Automatically set during the build process.
         address systemConfigProxy;
         // OptimismPortalProxy represents the address of the OptimismPortalProxy on L1 and is used
         // as part of the derivation pipeline.
+        // Automatically set during the build process.
         address optimismPortalProxy;
         // L1BlockTime is the number of seconds between each L1 block.
         uint256 l1BlockTime;
@@ -172,7 +218,10 @@ contract Build is Script {
         uint256 l2ChainId = vm.envUint("L2_CHAIN_ID");
         uint256 l1BlockTime = vm.envUint("L1_BLOCK_TIME");
         uint256 l2BlockTime = vm.envUint("L2_BLOCK_TIME");
+        uint256 l2GasLimit = vm.envUint("L2_GAS_LIMIT");
         uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
+        uint256 outputOracleStartingBlockNumber = vm.envUint("OUTPUT_ORACLE_STARTING_BLOCK_NUMBER");
+        uint256 outputOracleStartingTimestamp = vm.envUint("OUTPUT_ORACLE_STARTING_TIMESTAMP");
         uint256 l2ZeroFeeTime = vm.envOr("ENABLE_L2_ZERO_FEE", false) ? block.timestamp : 0;
 
         // construct a deployment configuration.
@@ -195,8 +244,8 @@ contract Build is Script {
             batchSenderAddress: batchSender,
             // ----
             l2OutputOracleSubmissionInterval: 120,
-            l2OutputOracleStartingBlockNumber: 0, // TODO: Operational L2 should set the latest block number.
-            l2OutputOracleStartingTimestamp: block.timestamp,
+            l2OutputOracleStartingBlockNumber: outputOracleStartingBlockNumber,
+            l2OutputOracleStartingTimestamp: outputOracleStartingTimestamp,
             // ----
             l2OutputOracleProposer: l2ooProposer,
             l2OutputOracleChallenger: l2ooChallenger,
@@ -215,26 +264,26 @@ contract Build is Script {
             l1FeeVaultWithdrawalNetwork: 0,
             sequencerFeeVaultWithdrawalNetwork: 0,
             // ----
-            gasPriceOracleOverhead: 2_100, // TODO: OP Mainnet is 188
-            gasPriceOracleScalar: 1_000_000, // TODO: OP Mainnet is 684000
-            // TODO: No need?
-            enableGovernance: true,
-            governanceTokenSymbol: "OP",
-            governanceTokenName: "Optimism",
+            gasPriceOracleOverhead: 188,
+            gasPriceOracleScalar: 684000,
+            // ----
+            enableGovernance: vm.envOr("ENABLE_GOVERNANCE", false),
+            governanceTokenSymbol: vm.envString("GOVERNANCE_TOKEN_NAME"),
+            governanceTokenName: vm.envString("GOVERNANCE_TOKEN_SYMBOL"),
             governanceTokenOwner: finalSystemOwner,
             // ----
-            l2GenesisBlockGasLimit: 30_000_000,
-            l2GenesisBlockBaseFeePerGas: 0, // TODO: gasless
+            l2GenesisBlockGasLimit: l2GasLimit,
+            l2GenesisBlockBaseFeePerGas: 0,
             l2GenesisRegolithTimeOffset: 0,
             // ----
             eip1559Denominator: 50,
-            eip1559DenominatorCanyon: 250, // TODO: OP Mainnet is not set.
-            eip1559Elasticity: 10, // TODO: OP Mainnet is 6.
+            eip1559DenominatorCanyon: 250,
+            eip1559Elasticity: 10, // OP Mainnet is 6.
             // ----
-            systemConfigStartBlock: 0,
+            systemConfigStartBlock: block.number - 1,
             // ----
-            requiredProtocolVersion: bytes32(0), // TODO: OP Mainnet is not zero.
-            recommendedProtocolVersion: bytes32(0), // TODO: OP Mainnet is not zero.
+            requiredProtocolVersion: bytes32(0),
+            recommendedProtocolVersion: bytes32(0),
             // ----
             l2ZeroFeeTime: l2ZeroFeeTime,
             // set later.
@@ -253,6 +302,7 @@ contract Build is Script {
             l2OutputOracleChallenger: deployCfg.l2OutputOracleChallenger,
             batchSenderAddress: deployCfg.batchSenderAddress,
             l2BlockTime: deployCfg.l2BlockTime,
+            l2GasLimit: uint64(deployCfg.l2GenesisBlockGasLimit),
             l2OutputOracleSubmissionInterval: deployCfg.l2OutputOracleSubmissionInterval,
             finalizationPeriodSeconds: deployCfg.finalizationPeriodSeconds,
             l2OutputOracleStartingBlockNumber: deployCfg.l2OutputOracleStartingBlockNumber,
