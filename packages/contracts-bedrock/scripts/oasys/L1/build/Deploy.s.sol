@@ -9,8 +9,8 @@ import { BuildProxy } from "src/oasys/L1/build/BuildProxy.sol";
 import { BuildL1CrossDomainMessenger } from "src/oasys/L1/build/BuildL1CrossDomainMessenger.sol";
 import { BuildL1ERC721Bridge } from "src/oasys/L1/build/BuildL1ERC721Bridge.sol";
 import { BuildL1StandardBridge } from "src/oasys/L1/build/BuildL1StandardBridge.sol";
-import { BuildL2OutputOracle } from "src/oasys/L1/build/BuildL2OutputOracle.sol";
-import { BuildOptimismPortal } from "src/oasys/L1/build/BuildOptimismPortal.sol";
+import { BuildOasysL2OutputOracle } from "src/oasys/L1/build/BuildOasysL2OutputOracle.sol";
+import { BuildOasysPortal } from "src/oasys/L1/build/BuildOasysPortal.sol";
 import { BuildSystemConfig } from "src/oasys/L1/build/BuildSystemConfig.sol";
 import { BuildProtocolVersions } from "src/oasys/L1/build/BuildProtocolVersions.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
@@ -52,6 +52,17 @@ contract Deploy is Script {
     PermissionedContractFactory pcc;
     ILegacyL1BuildAgent legacyL1BuildAgent;
 
+    struct BuildContracts {
+        address Proxy;
+        address OutputOracle;
+        address OasysPortal;
+        address L1Messenger;
+        address SystemConfig;
+        address L1StandardBridg;
+        address L1ERC721Bridge;
+        address ProtocolVersions;
+    }
+
     function setUp() public virtual {
         vm.createDir({ path: Path.deployOutDir(), recursive: true });
 
@@ -66,44 +77,25 @@ contract Deploy is Script {
     function run() public {
         vm.startBroadcast();
 
-        address _bProxy = _deploy("BuildProxy", type(BuildProxy).creationCode);
-        address _bOutputOracle = _deploy("BuildL2OutputOracle", type(BuildL2OutputOracle).creationCode);
-        address _bOptimismPortal = _deploy("BuildOptimismPortal", type(BuildOptimismPortal).creationCode);
-        address _bL1Messenger = _deploy("BuildL1CrossDomainMessenger", type(BuildL1CrossDomainMessenger).creationCode);
-        address _bSystemConfig = _deploy("BuildSystemConfig", type(BuildSystemConfig).creationCode);
-        address _bL1StandardBridg = _deploy("BuildL1StandardBridge", type(BuildL1StandardBridge).creationCode);
-        address _bL1ERC721Bridge = _deploy("BuildL1ERC721Bridge", type(BuildL1ERC721Bridge).creationCode);
-        address _bProtocolVersions = _deploy("BuildProtocolVersions", type(BuildProtocolVersions).creationCode);
+        BuildContracts memory builts = _deployBuildContracts();
 
         bytes memory creationCode = type(L1BuildAgent).creationCode;
         bytes memory constructorArgs = abi.encode(
-            _bProxy,
-            _bOutputOracle,
-            _bOptimismPortal,
-            _bL1Messenger,
-            _bSystemConfig,
-            _bL1StandardBridg,
-            _bL1ERC721Bridge,
-            _bProtocolVersions,
+            builts.Proxy,
+            builts.OutputOracle,
+            builts.OasysPortal,
+            builts.L1Messenger,
+            builts.SystemConfig,
+            builts.L1StandardBridg,
+            builts.L1ERC721Bridge,
+            builts.ProtocolVersions,
             legacyL1BuildAgent
         );
         address agent = _deploy("L1BuildAgent", abi.encodePacked(creationCode, constructorArgs));
 
         vm.stopBroadcast();
 
-        string memory json = ".";
-        json.serialize("BuildProxy", _bProxy);
-        json.serialize("BuildL2OutputOracle", _bOutputOracle);
-        json.serialize("BuildOptimismPortal", _bOptimismPortal);
-        json.serialize("BuildL1CrossDomainMessenger", _bL1Messenger);
-        json.serialize("BuildSystemConfig", _bSystemConfig);
-        json.serialize("BuildL1StandardBridge", _bL1StandardBridg);
-        json.serialize("BuildL1ERC721Bridge", _bL1ERC721Bridge);
-        json.serialize("BuildProtocolVersions", _bProtocolVersions);
-        json = json.serialize("L1BuildAgent", agent);
-
-        json.write(Path.deployLatestOutPath());
-        json.write(Path.deployRunOutPath());
+        _writeJson(agent, builts);
 
         console.log("Output: %s", Path.deployLatestOutPath());
         console.log("Output: %s", Path.deployRunOutPath());
@@ -112,5 +104,34 @@ contract Deploy is Script {
     function _deploy(string memory contractName, bytes memory deployBytecode) internal returns (address deployment) {
         deployment = pcc.getDeploymentAddress(salt, deployBytecode);
         pcc.create(0, salt, deployBytecode, deployment, contractName);
+    }
+
+    function _deployBuildContracts() internal returns (BuildContracts memory) {
+        return BuildContracts({
+            ProtocolVersions: _deploy("BuildProtocolVersions", type(BuildProtocolVersions).creationCode),
+            Proxy: _deploy("BuildProxy", type(BuildProxy).creationCode),
+            OutputOracle: _deploy("BuildL2OutputOracle", type(BuildOasysL2OutputOracle).creationCode),
+            OasysPortal: _deploy("BuildOasysPortal", type(BuildOasysPortal).creationCode),
+            L1Messenger: _deploy("BuildL1CrossDomainMessenger", type(BuildL1CrossDomainMessenger).creationCode),
+            SystemConfig: _deploy("BuildSystemConfig", type(BuildSystemConfig).creationCode),
+            L1StandardBridg: _deploy("BuildL1StandardBridge", type(BuildL1StandardBridge).creationCode),
+            L1ERC721Bridge: _deploy("BuildL1ERC721Bridge", type(BuildL1ERC721Bridge).creationCode)
+        });
+    }
+
+    function _writeJson(address agent, BuildContracts memory builts) internal {
+        string memory json = ".";
+        json.serialize("L1BuildAgent", agent);
+        json.serialize("BuildProxy", builts.Proxy);
+        json.serialize("BuildL2OutputOracle", builts.OutputOracle);
+        json.serialize("BuildOasysPortal", builts.OasysPortal);
+        json.serialize("BuildL1CrossDomainMessenger", builts.L1Messenger);
+        json.serialize("BuildSystemConfig", builts.SystemConfig);
+        json.serialize("BuildL1StandardBridge", builts.L1StandardBridg);
+        json.serialize("BuildL1ERC721Bridge", builts.L1ERC721Bridge);
+        json = json.serialize("BuildProtocolVersions", builts.ProtocolVersions);
+
+        json.write(Path.deployLatestOutPath());
+        json.write(Path.deployRunOutPath());
     }
 }

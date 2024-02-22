@@ -3,7 +3,6 @@ pragma solidity 0.8.15;
 
 import { ISemver } from "src/universal/ISemver.sol";
 import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
-import { ResourceMetering } from "src/L1/ResourceMetering.sol";
 import { IBuildL1StandardBridge } from "src/oasys/L1/build/interfaces/IBuildL1StandardBridge.sol";
 
 /// @notice Hold the deployment bytecode

@@ -45,6 +45,9 @@ contract L2OutputOracle is Initializable, ISemver {
     /// @notice An array of L2 output proposals.
     Types.OutputProposal[] internal l2Outputs;
 
+    /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
+    uint256[46] private __gap;
+
     /// @notice Emitted when an output is proposed.
     /// @param outputRoot    The output root.
     /// @param l2OutputIndex The index of the output in the l2Outputs array.
@@ -134,7 +137,7 @@ contract L2OutputOracle is Initializable, ISemver {
     /// @param _l2OutputIndex Index of the first L2 output to be deleted.
     ///                       All outputs after this output will also be deleted.
     // solhint-disable-next-line ordering
-    function deleteL2Outputs(uint256 _l2OutputIndex) external {
+    function deleteL2Outputs(uint256 _l2OutputIndex) external virtual {
         require(msg.sender == CHALLENGER, "L2OutputOracle: only the challenger address can delete outputs");
 
         // Make sure we're not *increasing* the length of the array.

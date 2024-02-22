@@ -13,8 +13,8 @@ import { Constants } from "src/libraries/Constants.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
 import { IBuildProxy } from "src/oasys/L1/build/interfaces/IBuildProxy.sol";
-import { IBuildL2OutputOracle } from "src/oasys/L1/build/interfaces/IBuildL2OutputOracle.sol";
-import { IBuildOptimismPortal } from "src/oasys/L1/build/interfaces/IBuildOptimismPortal.sol";
+import { IBuildOasysL2OutputOracle } from "src/oasys/L1/build/interfaces/IBuildOasysL2OutputOracle.sol";
+import { IBuildOasysPortal } from "src/oasys/L1/build/interfaces/IBuildOasysPortal.sol";
 import { IBuildL1CrossDomainMessenger } from "src/oasys/L1/build/interfaces/IBuildL1CrossDomainMessenger.sol";
 import { IBuildSystemConfig } from "src/oasys/L1/build/interfaces/IBuildSystemConfig.sol";
 import { IBuildL1StandardBridge } from "src/oasys/L1/build/interfaces/IBuildL1StandardBridge.sol";
@@ -30,8 +30,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     /// @notice These hold the bytecodes of the contracts that are deployed by this contract.
     ///         Separate to avoid hitting the contract size limit.
     IBuildProxy public immutable BUILD_PROXY;
-    IBuildL2OutputOracle public immutable BUILD_L2OUTPUT_ORACLE;
-    IBuildOptimismPortal public immutable BUILD_OPTIMISM_PORTAL;
+    IBuildOasysL2OutputOracle public immutable BUILD_OASYS_L2OO;
+    IBuildOasysPortal public immutable BUILD_OASYS_PORTAL;
     IBuildL1CrossDomainMessenger public immutable BUILD_L1CROSS_DOMAIN_MESSENGER;
     IBuildSystemConfig public immutable BUILD_SYSTEM_CONFIG;
     IBuildL1StandardBridge public immutable BUILD_L1_STANDARD_BRIDGE;
@@ -65,8 +65,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
     constructor(
         IBuildProxy _bProxy,
-        IBuildL2OutputOracle _bOutputOracle,
-        IBuildOptimismPortal _bOptimismPortal,
+        IBuildOasysL2OutputOracle _bOasysL2OO,
+        IBuildOasysPortal _bOasysPortal,
         IBuildL1CrossDomainMessenger _bL1CrossDomainMessenger,
         IBuildSystemConfig _bSystemConfig,
         IBuildL1StandardBridge _bL1StandardBridg,
@@ -75,8 +75,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         ILegacyL1BuildAgent _legacyL1BuildAgent
     ) {
         BUILD_PROXY = _bProxy;
-        BUILD_L2OUTPUT_ORACLE = _bOutputOracle;
-        BUILD_OPTIMISM_PORTAL = _bOptimismPortal;
+        BUILD_OASYS_L2OO = _bOasysL2OO;
+        BUILD_OASYS_PORTAL = _bOasysPortal;
         BUILD_L1CROSS_DOMAIN_MESSENGER = _bL1CrossDomainMessenger;
         BUILD_SYSTEM_CONFIG = _bSystemConfig;
         BUILD_L1_STANDARD_BRIDGE = _bL1StandardBridg;
@@ -127,8 +127,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         _initializeL1StandardBridge(proxyAdmin, impls[4], proxys);
         _initializeL1ERC721Bridge(proxyAdmin, impls[5], proxys);
         _initializeL1CrossDomainMessenger(proxyAdmin, impls[3], proxys);
-        _initializeL2OutputOracle(_cfg, proxyAdmin, impls[1], proxys);
-        _initializeOptimismPortal(proxyAdmin, impls[0], proxys);
+        _initializeOasysL2OutputOracle(_cfg, proxyAdmin, impls[1], proxys);
+        _initializeOasysPortal(proxyAdmin, impls[0], proxys);
         _initializeProtocolVersions(_cfg, proxyAdmin, impls[6], proxys);
 
         // transfer ownership of the proxy admin to the final system owner
@@ -173,8 +173,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         returns (ProxyAdmin proxyAdmin, address[7] memory proxys)
     {
         proxyAdmin = BUILD_PROXY.deployProxyAdmin({ owner: admin });
-        proxys[0] = _deployProxy(address(proxyAdmin)); // OptimismPortalProxy
-        proxys[1] = _deployProxy(address(proxyAdmin)); // L2OutputOracleProxy
+        proxys[0] = _deployProxy(address(proxyAdmin)); // OasysPortalProxy
+        proxys[1] = _deployProxy(address(proxyAdmin)); // OasysL2OutputOracleProxy
         proxys[2] = _deployProxy(address(proxyAdmin)); // SystemConfigProxy
         proxys[3] = _deployL1CrossDomainMessengerProxy(addressManager); // L1CrossDomainMessengerProxy
         proxys[4] = _deployL1StandardBridgeProxy(address(proxyAdmin)); // L1StandardBridgeProxy
@@ -225,8 +225,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         returns (address[7] memory impls)
     {
         impls[0] = _deployImplementation(
-            BUILD_OPTIMISM_PORTAL.deployBytecode({
-                _l2Oracle: proxys[1], // L2OutputOracleProxy
+            BUILD_OASYS_PORTAL.deployBytecode({
+                _l2Oracle: proxys[1], // OasysL2OutputOracleProxy
                 _guardian: _cfg.finalSystemOwner,
                 _systemConfig: proxys[2] // SystemConfigProxy
              })
@@ -237,7 +237,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
             _challenger = _cfg.finalSystemOwner;
         }
         impls[1] = _deployImplementation(
-            BUILD_L2OUTPUT_ORACLE.deployBytecode({
+            BUILD_OASYS_L2OO.deployBytecode({
                 _submissionInterval: _cfg.l2OutputOracleSubmissionInterval,
                 _l2BlockTime: _cfg.l2BlockTime,
                 _proposer: _cfg.l2OutputOracleProposer,
@@ -250,7 +250,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
         impls[3] = _deployImplementation(
             BUILD_L1CROSS_DOMAIN_MESSENGER.deployBytecode({
-                _portal: payable(proxys[0]) // OptimismPortalProxy
+                _portal: payable(proxys[0]) // OasysPortalProxy
              })
         );
 
@@ -369,8 +369,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         });
     }
 
-    /// @notice Initialize the L2OutputOracle
-    function _initializeL2OutputOracle(
+    /// @notice Initialize the OasysL2OutputOracle
+    function _initializeOasysL2OutputOracle(
         BuildConfig calldata _cfg,
         ProxyAdmin proxyAdmin,
         address impl,
@@ -383,21 +383,21 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         proxyAdmin.upgradeAndCall({
             _proxy: payable(l2OutputOracleProxy),
             _implementation: impl,
-            _data: BUILD_L2OUTPUT_ORACLE.initializeData({
+            _data: BUILD_OASYS_L2OO.initializeData({
                 _startingBlockNumber: _cfg.l2OutputOracleStartingBlockNumber,
                 _startingTimestamp: _cfg.l2OutputOracleStartingTimestamp
             })
         });
     }
 
-    /// @notice Initialize the OptimismPortal
-    function _initializeOptimismPortal(ProxyAdmin proxyAdmin, address impl, address[7] memory proxys) internal {
-        address optimismPortalProxy = proxys[0];
+    /// @notice Initialize the OasysPortal
+    function _initializeOasysPortal(ProxyAdmin proxyAdmin, address impl, address[7] memory proxys) internal {
+        address oasysPortalProxy = proxys[0];
 
         proxyAdmin.upgradeAndCall({
-            _proxy: payable(optimismPortalProxy),
+            _proxy: payable(oasysPortalProxy),
             _implementation: impl,
-            _data: BUILD_OPTIMISM_PORTAL.initializeData({ _paused: false })
+            _data: BUILD_OASYS_PORTAL.initializeData({ _paused: false })
         });
     }
 
