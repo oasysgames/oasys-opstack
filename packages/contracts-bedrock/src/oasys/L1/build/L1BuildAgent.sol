@@ -12,6 +12,7 @@ import { ISemver } from "src/universal/ISemver.sol";
 import { Constants } from "src/libraries/Constants.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
+import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
 import { IBuildProxy } from "src/oasys/L1/build/interfaces/IBuildProxy.sol";
 import { IBuildOasysL2OutputOracle } from "src/oasys/L1/build/interfaces/IBuildOasysL2OutputOracle.sol";
 import { IBuildOasysPortal } from "src/oasys/L1/build/interfaces/IBuildOasysPortal.sol";
@@ -37,6 +38,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     IBuildL1StandardBridge public immutable BUILD_L1_STANDARD_BRIDGE;
     IBuildL1ERC721Bridge public immutable BUILD_L1_ERC721_BRIDGE;
     IBuildProtocolVersions public immutable BUILD_PROTOCOL_VERSIONS;
+
+    /// @notice Referred to verify required deposit amount to build a Verse
+    IL1BuildDeposit public immutable L1_BUILD_DEPOSIT;
 
     /// @notice The address of the L1BuildAgentV1
     ///         Used to ensure that the chainId is unique and not duplicated.
@@ -72,6 +76,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         IBuildL1StandardBridge _bL1StandardBridg,
         IBuildL1ERC721Bridge _bL1ERC721Bridge,
         IBuildProtocolVersions _bProtocolVersions,
+        IL1BuildDeposit _l1BuildDeposit,
         ILegacyL1BuildAgent _legacyL1BuildAgent
     ) {
         BUILD_PROXY = _bProxy;
@@ -83,6 +88,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         BUILD_L1_ERC721_BRIDGE = _bL1ERC721Bridge;
         BUILD_PROTOCOL_VERSIONS = _bProtocolVersions;
 
+        L1_BUILD_DEPOSIT = _l1BuildDeposit;
         LEGACY_L1_BUILD_AGENT = _legacyL1BuildAgent;
     }
 
@@ -96,7 +102,18 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         external
         returns (address, address[7] memory, address[7] memory, address, address)
     {
-        require(isUniqueChainId(_chainId), "L1BuildAgent: already deployed");
+        // Not require to be globally unique, as the pre built L2 needs to be upgraded
+        require(_isInternallyUniqueChainId(_chainId), "L1BuildAgent: already deployed");
+        if (_requiresDepositCheck(_chainId)) {
+            require(
+                L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(),
+                "deposit amount shortage"
+            );
+        }
+
+        // build the deposit.
+        // Mark this builder as built.
+        L1_BUILD_DEPOSIT.build(msg.sender);
 
         // temporarily set the admin to this contract
         // transfer ownership to the final system owner at the end of building
@@ -163,6 +180,20 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
     function _isInternallyUniqueChainId(uint256 _chainId) internal view returns (bool) {
         return chainSystemConfig[_chainId] == address(0);
+    }
+
+    function _requiresDepositCheck(uint256 _chainId) internal view returns (bool) {
+        // always require deposit check if no legacy build agent
+        if (LEGACY_L1_BUILD_AGENT == ILegacyL1BuildAgent(address(0))) {
+            return true;
+        }
+        // skip deposit check if the chainId is already deployed by the legacy build agent
+        // In other words, skip deposit check in the case of L2 upgrade
+        if (LEGACY_L1_BUILD_AGENT.getAddressManager(_chainId) != address(0)) {
+            return false;
+        }
+        // require deposit check if the chainId is not deployed by the legacy build agent
+        return true;
     }
 
     function _deployProxies(
@@ -309,7 +340,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
                 // The value bellow is the same as the value of the Opstack Mainnet
                 _scalar: 684_000,
                 _gasLimit: _cfg.l2GasLimit
-             })
+            })
         });
     }
 

@@ -4,7 +4,9 @@ pragma solidity ^0.8.0;
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
+import { Proxy } from "src/universal/Proxy.sol";
 import { L1BuildAgent } from "src/oasys/L1/build/L1BuildAgent.sol";
+import { L1BuildDeposit } from "src/oasys/L1/build/L1BuildDeposit.sol";
 import { BuildProxy } from "src/oasys/L1/build/BuildProxy.sol";
 import { BuildL1CrossDomainMessenger } from "src/oasys/L1/build/BuildL1CrossDomainMessenger.sol";
 import { BuildL1ERC721Bridge } from "src/oasys/L1/build/BuildL1ERC721Bridge.sol";
@@ -13,7 +15,8 @@ import { BuildOasysL2OutputOracle } from "src/oasys/L1/build/BuildOasysL2OutputO
 import { BuildOasysPortal } from "src/oasys/L1/build/BuildOasysPortal.sol";
 import { BuildSystemConfig } from "src/oasys/L1/build/BuildSystemConfig.sol";
 import { BuildProtocolVersions } from "src/oasys/L1/build/BuildProtocolVersions.sol";
-import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
+import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
+import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Path } from "./_path.sol";
 
@@ -50,7 +53,8 @@ contract Deploy is Script {
 
     bytes32 salt;
     PermissionedContractFactory pcc;
-    ILegacyL1BuildAgent legacyL1BuildAgent;
+    IL1BuildAgent legacyL1BuildAgent;
+    IL1BuildDeposit legacyL1BuildDeposit;
 
     struct BuildContracts {
         address Proxy;
@@ -68,7 +72,8 @@ contract Deploy is Script {
 
         salt = keccak256(bytes(vm.envString("SALT")));
         pcc = PermissionedContractFactory(0x520000000000000000000000000000000000002F);
-        legacyL1BuildAgent = ILegacyL1BuildAgent(0x5200000000000000000000000000000000000008);
+        legacyL1BuildAgent = IL1BuildAgent(0x5200000000000000000000000000000000000008);
+        legacyL1BuildDeposit = IL1BuildDeposit(0x5200000000000000000000000000000000000007);
 
         console.log("Sender: %s", msg.sender);
         console.log("Salt: %s", vm.toString(salt));
@@ -79,8 +84,9 @@ contract Deploy is Script {
 
         BuildContracts memory builts = _deployBuildContracts();
 
-        bytes memory creationCode = type(L1BuildAgent).creationCode;
-        bytes memory constructorArgs = abi.encode(
+        (address pAgent, address pDeposit) = _deployProxies();
+        _initL1BuildDeposit(pDeposit, pAgent);
+        _initL1BuildAgent(
             builts.Proxy,
             builts.OutputOracle,
             builts.OasysPortal,
@@ -89,13 +95,13 @@ contract Deploy is Script {
             builts.L1StandardBridg,
             builts.L1ERC721Bridge,
             builts.ProtocolVersions,
-            legacyL1BuildAgent
+            pAgent,
+            pDeposit
         );
-        address agent = _deploy("L1BuildAgent", abi.encodePacked(creationCode, constructorArgs));
 
         vm.stopBroadcast();
 
-        _writeJson(agent, builts);
+        _writeJson(pAgent, pDeposit, builts);
 
         console.log("Output: %s", Path.deployLatestOutPath());
         console.log("Output: %s", Path.deployRunOutPath());
@@ -104,6 +110,88 @@ contract Deploy is Script {
     function _deploy(string memory contractName, bytes memory deployBytecode) internal returns (address deployment) {
         deployment = pcc.getDeploymentAddress(salt, deployBytecode);
         pcc.create(0, salt, deployBytecode, deployment, contractName);
+    }
+
+    function _deployWithCustomSalt(
+        string memory contractName,
+        bytes memory deployBytecode,
+        bytes32 _salt
+    )
+        internal
+        returns (address deployment)
+    {
+        deployment = pcc.getDeploymentAddress(_salt, deployBytecode);
+        pcc.create(0, _salt, deployBytecode, deployment, contractName);
+    }
+
+    // Deploy proxies for L1BuildDeposit and L1BuildAgent
+    function _deployProxies() internal returns (address, address) {
+        // Authorized to upgrade L1BuildAgent and L1BuildDeposit
+        address admin = msg.sender;
+        address pAgent = _deployWithCustomSalt(
+            "Proxy",
+            abi.encodePacked(type(Proxy).creationCode, abi.encode(admin)),
+            0x0000000000000000000000000000000000000000000000000000000000000001
+        );
+        address pDeposit = _deployWithCustomSalt(
+            "Proxy",
+            abi.encodePacked(type(Proxy).creationCode, abi.encode(admin)),
+            0x0000000000000000000000000000000000000000000000000000000000000002
+        );
+        return (pAgent, pDeposit);
+    }
+
+    function _initL1BuildDeposit(address pDeposit, address agent) internal {
+        // Deploy L1BuildDeposit
+        address deposit = _deploy(
+            "L1BuildDeposit",
+            abi.encodePacked(
+                type(L1BuildDeposit).creationCode,
+                abi.encode(
+                    1 ether, // requiredAmount,
+                    100, // lockedBlock,
+                    agent,
+                    legacyL1BuildDeposit
+                )
+            )
+        );
+
+        // Set implementation of L1BuildDeposit
+        address[] memory addresses = new address[](1);
+        addresses[0] = 0x5200000000000000000000000000000000000002; // sOAS
+        bytes memory initCall = abi.encodeWithSignature("initialize(address[])", addresses);
+        Proxy(payable(pDeposit)).upgradeToAndCall(deposit, initCall);
+    }
+
+    function _initL1BuildAgent(
+        address _bProxy,
+        address _bOutputOracle,
+        address _bOptimismPortal,
+        address _bL1Messenger,
+        address _bSystemConfig,
+        address _bL1StandardBridg,
+        address _bL1ERC721Bridge,
+        address _bProtocolVersions,
+        address pAgent,
+        address deposit
+    )
+        internal
+    {
+        bytes memory creationCode = type(L1BuildAgent).creationCode;
+        bytes memory constructorArgs = abi.encode(
+            _bProxy,
+            _bOutputOracle,
+            _bOptimismPortal,
+            _bL1Messenger,
+            _bSystemConfig,
+            _bL1StandardBridg,
+            _bL1ERC721Bridge,
+            _bProtocolVersions,
+            deposit,
+            legacyL1BuildAgent
+        );
+        address agent = _deploy("L1BuildAgent", abi.encodePacked(creationCode, constructorArgs));
+        Proxy(payable(pAgent)).upgradeTo(agent);
     }
 
     function _deployBuildContracts() internal returns (BuildContracts memory) {
@@ -119,9 +207,10 @@ contract Deploy is Script {
         });
     }
 
-    function _writeJson(address agent, BuildContracts memory builts) internal {
+    function _writeJson(address agent, address deposit, BuildContracts memory builts) internal {
         string memory json = ".";
         json.serialize("L1BuildAgent", agent);
+        json.serialize("L1BuildDeposit", deposit);
         json.serialize("BuildProxy", builts.Proxy);
         json.serialize("BuildL2OutputOracle", builts.OutputOracle);
         json.serialize("BuildOasysPortal", builts.OasysPortal);

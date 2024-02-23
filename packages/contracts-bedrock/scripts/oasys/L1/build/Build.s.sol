@@ -5,6 +5,7 @@ import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
+import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
 import { OasysPortal } from "src/oasys/L1/messaging/OasysPortal.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Path } from "./_path.sol";
@@ -12,7 +13,8 @@ import { Path } from "./_path.sol";
 contract Build is Script {
     using stdJson for string;
 
-    /// @notice See: https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/config.go
+    /// @notice See:
+    /// https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/config.go
     struct DeployConfig {
         // FinalSystemOwner is the owner of the system on L1. Any L1 contract that is ownable has
         // this account set as its owner.
@@ -207,6 +209,7 @@ contract Build is Script {
 
     DeployConfig deployCfg;
     IL1BuildAgent.BuildConfig buildCfg;
+    IL1BuildDeposit deposit;
     IL1BuildAgent agent;
 
     function setUp() public {
@@ -315,14 +318,21 @@ contract Build is Script {
         vm.createDir({ path: Path.buildLatestOutDir(), recursive: true });
         vm.createDir({ path: Path.buildRunOutDir(), recursive: true });
 
+        // read the L1BuildDeposit address, which has been deployed on L1, from the output directory.
+        deposit = _readDeployedL1BuildDeposit();
+        console.log("L1BuildDeposit: %s", address(deposit));
+
         // read the L1BuildAgent address, which has been deployed on L1, from the output directory.
         agent = _readDeployedL1BuildAgent();
         console.log("L1BuildAgent: %s", address(agent));
     }
 
     function run() public {
-        // build L2.
         vm.startBroadcast();
+        // deposit 1 eth to the L1BuildDeposit contract.
+        deposit.deposit{ value: 1 ether }(msg.sender);
+
+        // build L2.
         (address proxyAdmin, address[7] memory proxys,, address batchInbox, address addressManager) =
             agent.build(deployCfg.l2ChainID, buildCfg);
         vm.stopBroadcast();
@@ -349,6 +359,11 @@ contract Build is Script {
         // output to the `./tmp/L1BuildAgent/Build/run-{L1_BLOCK_NUM}` directory
         _writeJson(deployCfgJson, Path.buildRunOutDir(), "/deploy-config.json");
         _writeJson(addressesJson, Path.buildRunOutDir(), "/addresses.json");
+    }
+
+    function _readDeployedL1BuildDeposit() internal view returns (IL1BuildDeposit) {
+        string memory json = vm.readFile(Path.deployLatestOutPath());
+        return IL1BuildDeposit(stdJson.readAddress(json, "$.L1BuildDeposit"));
     }
 
     function _readDeployedL1BuildAgent() internal view returns (IL1BuildAgent) {
