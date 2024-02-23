@@ -6,6 +6,7 @@ import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
 import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
+import { OasysPortal } from "src/oasys/L1/messaging/OasysPortal.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Path } from "./_path.sol";
 
@@ -223,6 +224,7 @@ contract Build is Script {
         uint256 l2BlockTime = vm.envUint("L2_BLOCK_TIME");
         uint256 l2GasLimit = vm.envUint("L2_GAS_LIMIT");
         uint256 finalizationPeriodSeconds = vm.envUint("FINALIZATION_PERIOD_SECONDS");
+        uint256 outputOracleSubmissionInterval = vm.envUint("OUTPUT_ORACLE_SUBMISSION_INTERVAL");
         uint256 outputOracleStartingBlockNumber = vm.envUint("OUTPUT_ORACLE_STARTING_BLOCK_NUMBER");
         uint256 outputOracleStartingTimestamp = vm.envUint("OUTPUT_ORACLE_STARTING_TIMESTAMP");
         uint256 l2ZeroFeeTime = vm.envOr("ENABLE_L2_ZERO_FEE", false) ? block.timestamp : 0;
@@ -246,7 +248,7 @@ contract Build is Script {
             p2pSequencerAddress: p2pSequencer,
             batchSenderAddress: batchSender,
             // ----
-            l2OutputOracleSubmissionInterval: 120,
+            l2OutputOracleSubmissionInterval: outputOracleSubmissionInterval,
             l2OutputOracleStartingBlockNumber: outputOracleStartingBlockNumber,
             l2OutputOracleStartingTimestamp: outputOracleStartingTimestamp,
             // ----
@@ -500,5 +502,31 @@ contract Build is Script {
         json.serialize("L1CrossDomainMessengerProxy", deployCfg.l1CrossDomainMessengerProxy);
         json.serialize("L1StandardBridgeProxy", deployCfg.l1StandardBridgeProxy);
         return json.serialize("L1ERC721BridgeProxy", deployCfg.l1ERC721BridgeProxy);
+    }
+}
+
+// Set the message relayer address to the OasysPortal.
+contract SetMessageRelayer is Script {
+    using stdJson for string;
+
+    OasysPortal portal;
+
+    function setUp() public {
+        // get the deployed OptimismPortal contract.
+        string memory addresses = vm.readFile(string.concat(Path.buildLatestOutDir(), "/addresses.json"));
+        portal = OasysPortal(payable(stdJson.readAddress(addresses, "$.OptimismPortalProxy")));
+    }
+
+    function run() public {
+        address oldRelayer = portal.messageRelayer();
+        address newRelayer = vm.envAddress("MESSAGE_RELAYER");
+
+        vm.startBroadcast();
+        portal.setMessageRelayer(newRelayer);
+        vm.stopBroadcast();
+
+        console.log("OasysPortal: %s", address(portal));
+        console.log("Old relayer: %s", oldRelayer);
+        console.log("New relayer: %s", newRelayer);
     }
 }

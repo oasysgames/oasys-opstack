@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-interface IBuildOptimismPortal {
+interface IBuildOasysPortal {
     /// @notice The create2 salt used for deployment of the contract implementations.
     /// @param _l2Oracle Address of the L2OutputOracle contract.
     /// @param _guardian Address that can pause withdrawals.

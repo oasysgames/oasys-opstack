@@ -47,17 +47,17 @@ contract OasysStateCommitmentChainVerifier {
     /**
      * Approve the state batch.
      * @param stateCommitmentChain Address of the target IOasysStateCommitmentChain.
-     * @param batchHeader Target batch header.
-     * @param signatures List of signatures.
+     * @param batchHeader          Target batch header.
+     * @param signatures           List of signatures.
      */
     function approve(
         address stateCommitmentChain,
         Lib_OVMCodec.ChainBatchHeader memory batchHeader,
         bytes[] memory signatures
     )
-        external
+        public
     {
-        _verifySignatures(stateCommitmentChain, batchHeader, true, signatures);
+        _verifySignatures(_getMsgHash(stateCommitmentChain, batchHeader, true), signatures);
 
         IOasysStateCommitmentChain(stateCommitmentChain).succeedVerification(batchHeader);
 
@@ -67,17 +67,17 @@ contract OasysStateCommitmentChainVerifier {
     /**
      * Reject the state batch.
      * @param stateCommitmentChain Address of the target IOasysStateCommitmentChain.
-     * @param batchHeader Target batch header.
-     * @param signatures List of signatures.
+     * @param batchHeader          Target batch header.
+     * @param signatures           List of signatures.
      */
     function reject(
         address stateCommitmentChain,
         Lib_OVMCodec.ChainBatchHeader memory batchHeader,
         bytes[] memory signatures
     )
-        external
+        public
     {
-        _verifySignatures(stateCommitmentChain, batchHeader, false, signatures);
+        _verifySignatures(_getMsgHash(stateCommitmentChain, batchHeader, false), signatures);
 
         IOasysStateCommitmentChain(stateCommitmentChain).failVerification(batchHeader);
 
@@ -91,31 +91,33 @@ contract OasysStateCommitmentChainVerifier {
      */
 
     /**
-     * Verify signatures.
+     * Create data to be signed and return its message hash.
      * @param stateCommitmentChain Address of the target IOasysStateCommitmentChain.
-     * @param batchHeader Target state.
-     * @param approved Approve or Reject.
-     * @param signatures List of signatures.
+     * @param batchHeader          Target state.
+     * @param approved             Approve or Reject.
      */
-    function _verifySignatures(
+    function _getMsgHash(
         address stateCommitmentChain,
         Lib_OVMCodec.ChainBatchHeader memory batchHeader,
-        bool approved,
-        bytes[] memory signatures
+        bool approved
     )
         internal
         view
+        returns (bytes32)
     {
-        address[] memory verifiers = _recoverSigners(
-            keccak256(
-                abi.encodePacked(
-                    block.chainid, stateCommitmentChain, batchHeader.batchIndex, batchHeader.batchRoot, approved
-                )
-            ),
-            signatures
+        bytes memory signData = abi.encodePacked(
+            block.chainid, stateCommitmentChain, batchHeader.batchIndex, batchHeader.batchRoot, approved
         );
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", keccak256(signData)));
+    }
 
-        _verifyTotalStakeOverHalf(verifiers);
+    /**
+     * Verify signatures.
+     * @param msgHash    Message hash of data to be signed.
+     * @param signatures List of signatures.
+     */
+    function _verifySignatures(bytes32 msgHash, bytes[] memory signatures) internal view {
+        _verifyTotalStakeOverHalf(_recoverSigners(msgHash, signatures));
     }
 
     /**
@@ -141,11 +143,11 @@ contract OasysStateCommitmentChainVerifier {
 
     /**
      * Returns a list of addresses that signed the hashed message.
-     * @param data Data to be signed.
-     * @param signatures List of signatures.
+     * @param msgHash    Message hash of data to be signed.
+     * @param signatures Signature list to be recoverd.
      */
     function _recoverSigners(
-        bytes32 data,
+        bytes32 msgHash,
         bytes[] memory signatures
     )
         internal
@@ -154,23 +156,9 @@ contract OasysStateCommitmentChainVerifier {
     {
         signers = new address[](signatures.length);
 
-        bytes32 _hash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", data));
-
         address lastSigner = address(0);
         for (uint256 i = 0; i < signatures.length; i++) {
-            bytes memory signature = signatures[i];
-            (address signer, ECDSA.RecoverError err) = ECDSA.tryRecover(_hash, signature);
-
-            if (err == ECDSA.RecoverError.InvalidSignature) {
-                revert InvalidSignature(signature, "ECDSA: invalid signature");
-            } else if (err == ECDSA.RecoverError.InvalidSignatureLength) {
-                revert InvalidSignature(signature, "ECDSA: invalid signature length");
-            } else if (err == ECDSA.RecoverError.InvalidSignatureS) {
-                revert InvalidSignature(signature, "ECDSA: invalid signature 's' value");
-            } else if (err == ECDSA.RecoverError.InvalidSignatureV) {
-                revert InvalidSignature(signature, "ECDSA: invalid signature 'v' value");
-            }
-
+            address signer = _recoverSigner(msgHash, signatures[i]);
             if (signer <= lastSigner) {
                 revert InvalidAddressSort(signer);
             }
@@ -178,5 +166,27 @@ contract OasysStateCommitmentChainVerifier {
             signers[i] = signer;
             lastSigner = signer;
         }
+    }
+
+    /**
+     * Returns a list of addresses that signed the hashed message.
+     * @param msgHash   Message hash of data to be signed.
+     * @param signature Signature to be recoverd.
+     */
+    function _recoverSigner(bytes32 msgHash, bytes memory signature) internal pure returns (address) {
+        (address signer, ECDSA.RecoverError err) = ECDSA.tryRecover(msgHash, signature);
+
+        if (err == ECDSA.RecoverError.NoError) {
+            return signer;
+        } else if (err == ECDSA.RecoverError.InvalidSignature) {
+            revert InvalidSignature(signature, "ECDSA: invalid signature");
+        } else if (err == ECDSA.RecoverError.InvalidSignatureLength) {
+            revert InvalidSignature(signature, "ECDSA: invalid signature length");
+        } else if (err == ECDSA.RecoverError.InvalidSignatureS) {
+            revert InvalidSignature(signature, "ECDSA: invalid signature 's' value");
+        } else if (err == ECDSA.RecoverError.InvalidSignatureV) {
+            revert InvalidSignature(signature, "ECDSA: invalid signature 'v' value");
+        }
+        revert InvalidSignature(signature, "ECDSA: invalid signature");
     }
 }

@@ -67,6 +67,9 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     ///         This may be removed in the future.
     bool public paused;
 
+    /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
+    uint256[46] private __gap;
+
     /// @notice Emitted when a transaction is deposited from L1 to L2.
     ///         The parameters of this event are read by the rollup node and used to derive deposit
     ///         transactions on L2.
@@ -118,7 +121,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     }
 
     /// @notice Initializer.
-    function initialize(bool _paused) public initializer {
+    function initialize(bool _paused) public virtual initializer {
         l2Sender = Constants.DEFAULT_L2_SENDER;
         paused = _paused;
         __ResourceMetering_init();
@@ -202,7 +205,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         Types.OutputRootProof calldata _outputRootProof,
         bytes[] calldata _withdrawalProof
     )
-        external
+        public
         whenNotPaused
     {
         // Prevent users from creating a deposit transaction where this address is the message
@@ -271,7 +274,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
 
     /// @notice Finalizes a withdrawal transaction.
     /// @param _tx Withdrawal transaction to finalize.
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx) external whenNotPaused {
+    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx) public whenNotPaused {
         // Make sure that the l2Sender has not yet been set. The l2Sender is set to a value other
         // than the default value when a withdrawal transaction is being finalized. This check is
         // a defacto reentrancy guard.
@@ -421,7 +424,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     ///         the provided block timestamp.
     /// @param _timestamp Timestamp to check.
     /// @return Whether or not the finalization period has elapsed.
-    function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view returns (bool) {
+    function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view virtual returns (bool) {
         return block.timestamp > _timestamp + L2_ORACLE.FINALIZATION_PERIOD_SECONDS();
     }
 }
