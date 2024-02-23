@@ -95,7 +95,6 @@ contract Deploy is Script {
             builts.L1StandardBridg,
             builts.L1ERC721Bridge,
             builts.ProtocolVersions,
-            legacyL1BuildAgent,
             pAgent,
             pDeposit
         );
