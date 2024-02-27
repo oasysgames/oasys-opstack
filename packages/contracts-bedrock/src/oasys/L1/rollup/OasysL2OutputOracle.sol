@@ -122,6 +122,7 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
         if (l2OutputIndex < nextVerifyIndex) {
             return true;
         }
+        //slither-disable-next-line block-timestamp
         if (block.timestamp - l2Outputs[l2OutputIndex].timestamp > FINALIZATION_PERIOD_SECONDS) {
             return true;
         }
