@@ -53,6 +53,7 @@ contract LegacyL1BuildDeposit {
      * @param _agentAddress Address of the L1BuildAgent contract.
      */
     constructor(uint256 _requiredAmount, uint256 _lockedBlock, address _agentAddress) {
+        require(_agentAddress != address(0), "agent is zero address");
         requiredAmount = _requiredAmount;
         lockedBlock = _lockedBlock;
         agentAddress = _agentAddress;
@@ -111,9 +112,11 @@ contract LegacyL1BuildDeposit {
      * @param _amount Amount of the OAS token.
      */
     function withdraw(address _builder, uint256 _amount) external {
+        require(_builder != address(0), "builder is zero address");
         address depositer = msg.sender;
         _withdraw(_builder, depositer, OAS, _amount);
 
+        //slither-disable-next-line arbitrary-send-eth
         (bool success,) = depositer.call{ value: _amount }("");
         require(success, "OAS transfer failed");
 
