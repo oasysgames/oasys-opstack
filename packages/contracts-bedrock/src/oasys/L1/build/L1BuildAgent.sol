@@ -22,6 +22,7 @@ import { IBuildL1StandardBridge } from "src/oasys/L1/build/interfaces/IBuildL1St
 import { IBuildL1ERC721Bridge } from "src/oasys/L1/build/interfaces/IBuildL1ERC721Bridge.sol";
 import { IBuildProtocolVersions } from "src/oasys/L1/build/interfaces/IBuildProtocolVersions.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
+import { IOasysL2OutputOracleVerifier } from "src/oasys/L1/interfaces/IOasysL2OutputOracleVerifier.sol";
 
 /// @notice The 2nd version of L1BuildAgent
 ///         Regarding the build step, referred to the build script of Opstack
@@ -38,6 +39,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     IBuildL1StandardBridge public immutable BUILD_L1_STANDARD_BRIDGE;
     IBuildL1ERC721Bridge public immutable BUILD_L1_ERC721_BRIDGE;
     IBuildProtocolVersions public immutable BUILD_PROTOCOL_VERSIONS;
+    IOasysL2OutputOracleVerifier public immutable L2OO_VERIFIER;
 
     /// @notice Referred to verify required deposit amount to build a Verse
     IL1BuildDeposit public immutable L1_BUILD_DEPOSIT;
@@ -77,7 +79,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         IBuildL1ERC721Bridge _bL1ERC721Bridge,
         IBuildProtocolVersions _bProtocolVersions,
         IL1BuildDeposit _l1BuildDeposit,
-        ILegacyL1BuildAgent _legacyL1BuildAgent
+        ILegacyL1BuildAgent _legacyL1BuildAgent,
+        IOasysL2OutputOracleVerifier _l2ooVerifier
     ) {
         BUILD_PROXY = _bProxy;
         BUILD_OASYS_L2OO = _bOasysL2OO;
@@ -90,6 +93,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
         L1_BUILD_DEPOSIT = _l1BuildDeposit;
         LEGACY_L1_BUILD_AGENT = _legacyL1BuildAgent;
+        L2OO_VERIFIER = _l2ooVerifier;
     }
 
     /// @notice Deploy the L1 contract set to build Verse, This is th main function.
@@ -273,7 +277,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
                 _l2BlockTime: _cfg.l2BlockTime,
                 _proposer: _cfg.l2OutputOracleProposer,
                 _challenger: _challenger,
-                _finalizationPeriodSeconds: _cfg.finalizationPeriodSeconds
+                _finalizationPeriodSeconds: _cfg.finalizationPeriodSeconds,
+                _verifier: address(L2OO_VERIFIER)
             })
         );
 

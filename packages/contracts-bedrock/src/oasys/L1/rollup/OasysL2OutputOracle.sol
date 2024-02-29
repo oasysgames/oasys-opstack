@@ -4,15 +4,20 @@ pragma solidity 0.8.15;
 import { Constants } from "src/libraries/Constants.sol";
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
-import { PredeployAddresses } from "src/oasys/L1/build/legacy/PredeployAddresses.sol";
 import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOracle.sol";
+import { IOasysL2OutputOracleVerifier } from "src/oasys/L1/interfaces/IOasysL2OutputOracleVerifier.sol";
 
 /// @custom:proxied
 /// @title OasysL2OutputOracle
 /// @notice The OasysL2OutputOracle is a contract that extends
 ///         L2OutputOracle to enable instant verification.
 contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
+    /// @notice Address of the OasysL2OutputOracleVerifier contract.
+    ///         This will be removed in the future, use `l2OracleVerifier` instead.
+    /// @custom:legacy
+    IOasysL2OutputOracleVerifier public immutable VERIFIER;
+
     /// @notice Next L2Output index to verify.
     uint256 public nextVerifyIndex;
 
@@ -23,7 +28,8 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
         uint256 _startingTimestamp,
         address _proposer,
         address _challenger,
-        uint256 _finalizationPeriodSeconds
+        uint256 _finalizationPeriodSeconds,
+        IOasysL2OutputOracleVerifier _verifier
     )
         L2OutputOracle(
             _submissionInterval,
@@ -34,7 +40,9 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
             _challenger,
             _finalizationPeriodSeconds
         )
-    { }
+    {
+        VERIFIER = _verifier;
+    }
 
     /// @notice Initializer.
     /// @param _startingBlockNumber Block number for the first recoded L2 block.
@@ -43,9 +51,15 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
         super.initialize(_startingBlockNumber, _startingTimestamp);
     }
 
+    /// @notice Getter function for the address of the OasysL2OutputOracleVerifier on this chain.
+    /// @notice Address of the OasysL2OutputOracleVerifier on this chain.
+    function l2OracleVerifier() public view returns (IOasysL2OutputOracleVerifier) {
+        return VERIFIER;
+    }
+
     /// @inheritdoc IOasysL2OutputOracle
     function succeedVerification(uint256 l2OutputIndex, Types.OutputProposal calldata l2Output) external {
-        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "OasysL2OutputOracle: caller is not allowed");
+        require(msg.sender == address(VERIFIER), "OasysL2OutputOracle: caller is not allowed");
 
         require(_isValidL2Output(l2OutputIndex, l2Output), "OasysL2OutputOracle: invalid output root");
 
@@ -58,7 +72,7 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
 
     /// @inheritdoc IOasysL2OutputOracle
     function failVerification(uint256 l2OutputIndex, Types.OutputProposal calldata l2Output) external {
-        require(msg.sender == PredeployAddresses.SCC_VERIFIER, "OasysL2OutputOracle: caller is not allowed");
+        require(msg.sender == address(VERIFIER), "OasysL2OutputOracle: caller is not allowed");
 
         require(_isValidL2Output(l2OutputIndex, l2Output), "OasysL2OutputOracle: invalid output root");
 
