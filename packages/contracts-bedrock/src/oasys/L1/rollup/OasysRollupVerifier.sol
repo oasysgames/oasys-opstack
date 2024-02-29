@@ -70,10 +70,13 @@ contract OasysRollupVerifier is OasysStateCommitmentChainVerifier {
             block.chainid,
             l2OutputOracle,
             l2OutputIndex,
-            abi.encodePacked(
-                l2Output.outputRoot,
-                l2Output.timestamp, // Prevent reuse of signature by including L1 timestamp.
-                l2Output.l2BlockNumber
+            keccak256(
+                abi.encodePacked(
+                    l2Output.outputRoot,
+                    // Prevent reuse of signature by including L1 timestamp.
+                    l2Output.timestamp,
+                    l2Output.l2BlockNumber
+                )
             ),
             approved
         );
