@@ -3,19 +3,17 @@ pragma solidity 0.8.15;
 
 import { Types } from "src/libraries/Types.sol";
 import { OasysStateCommitmentChainVerifier } from "src/oasys/L1/build/legacy/OasysStateCommitmentChainVerifier.sol";
+import { ISemver } from "src/universal/ISemver.sol";
+import { IOasysRollupVerifier } from "src/oasys/L1/interfaces/IOasysRollupVerifier.sol";
 import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOracle.sol";
 
 /// @title OasysRollupVerifier
-contract OasysRollupVerifier is OasysStateCommitmentChainVerifier {
-    event L2OutputApproved(address indexed l2OutputOracle, uint256 indexed l2OutputIndex, bytes32 indexed outputRoot);
+contract OasysRollupVerifier is OasysStateCommitmentChainVerifier, IOasysRollupVerifier, ISemver {
+    /// @notice Semantic version.
+    /// @custom:semver 1.0.0
+    string public constant version = "1.0.0";
 
-    event L2OutputRejected(address indexed l2OutputOracle, uint256 indexed l2OutputIndex, bytes32 indexed outputRoot);
-
-    /// @notice Approve the L2 output.
-    /// @param l2OutputOracle Address of the target L2OutputOracle.
-    /// @param l2OutputIndex  Index of the target L2Output.
-    /// @param l2Output       Target L2 Output.
-    /// @param signatures     List of signatures.
+    /// @inheritdoc IOasysRollupVerifier
     function approve(
         address l2OutputOracle,
         uint256 l2OutputIndex,
@@ -31,11 +29,7 @@ contract OasysRollupVerifier is OasysStateCommitmentChainVerifier {
         emit L2OutputApproved(l2OutputOracle, l2OutputIndex, l2Output.outputRoot);
     }
 
-    /// @notice Reject the L2 output.
-    /// @param l2OutputOracle Address of the target L2OutputOracle.
-    /// @param l2OutputIndex  Index of the target L2Output.
-    /// @param l2Output       Target L2 Output.
-    /// @param signatures     List of signatures.
+    /// @inheritdoc IOasysRollupVerifier
     function reject(
         address l2OutputOracle,
         uint256 l2OutputIndex,
