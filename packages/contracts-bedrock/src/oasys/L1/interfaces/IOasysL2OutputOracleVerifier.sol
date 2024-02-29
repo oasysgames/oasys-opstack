@@ -3,8 +3,8 @@ pragma solidity 0.8.15;
 
 import { Types } from "src/libraries/Types.sol";
 
-/// @title IOasysRollupVerifier
-interface IOasysRollupVerifier {
+/// @title IOasysL2OutputOracleVerifier
+interface IOasysL2OutputOracleVerifier {
     event L2OutputApproved(address indexed l2OutputOracle, uint256 indexed l2OutputIndex, bytes32 indexed outputRoot);
     event L2OutputRejected(address indexed l2OutputOracle, uint256 indexed l2OutputIndex, bytes32 indexed outputRoot);
 
