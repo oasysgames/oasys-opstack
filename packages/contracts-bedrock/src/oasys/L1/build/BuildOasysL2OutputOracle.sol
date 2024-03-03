@@ -18,7 +18,8 @@ contract BuildOasysL2OutputOracle is IBuildOasysL2OutputOracle, ISemver {
         uint256 _l2BlockTime,
         address _proposer,
         address _challenger,
-        uint256 _finalizationPeriodSeconds
+        uint256 _finalizationPeriodSeconds,
+        address _verifier
     )
         public
         pure
@@ -33,7 +34,8 @@ contract BuildOasysL2OutputOracle is IBuildOasysL2OutputOracle, ISemver {
                 0, // _startingTimestamp
                 _proposer,
                 _challenger,
-                _finalizationPeriodSeconds
+                _finalizationPeriodSeconds,
+                _verifier
             )
         );
     }
