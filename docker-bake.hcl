@@ -1,9 +1,9 @@
 variable "REGISTRY" {
-  default = "us-docker.pkg.dev"
+  default = "localhost"
 }
 
 variable "REPOSITORY" {
-  default = "oplabs-tools-artifacts/images"
+  default = "oasysgames/oasys-opstack"
 }
 
 variable "GIT_COMMIT" {
@@ -59,6 +59,10 @@ variable OP_PROGRAM_VERSION {
 
 variable CANNON_VERSION {
   default = "${GIT_VERSION}"
+}
+
+group "default" {
+  targets = ["op-node", "op-batcher", "op-proposer"]
 }
 
 target "op-node" {
