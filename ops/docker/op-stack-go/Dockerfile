@@ -1,15 +1,17 @@
+# All target images use this as base image, and add the final build results.
+# It will default to the target platform.
+ARG TARGET_BASE_IMAGE=debian:11.9-slim
+
+# We may be cross-building for another platform. Specify which platform we need as builder.
+FROM --platform=$BUILDPLATFORM golang:1.21.3-bullseye as builder
+
 # automatically set by buildkit, can be changed with --platform flag
+# Note: This args must not be placed above `FROM`.
+#       GOOS and GOARCH will not be able to reference it.
 ARG TARGETOS
 ARG TARGETARCH
 
-# All target images use this as base image, and add the final build results.
-# It will default to the target platform.
-ARG TARGET_BASE_IMAGE=alpine:3.18
-
-# We may be cross-building for another platform. Specify which platform we need as builder.
-FROM --platform=$BUILDPLATFORM golang:1.21.3-alpine3.18 as builder
-
-RUN apk add --no-cache make gcc musl-dev linux-headers git jq bash
+RUN apt update && apt install -y git jq bash
 
 # We copy the go.mod/sum first, so the `go mod download` does not have to re-run if dependencies do not change.
 COPY ./go.mod /app/go.mod
