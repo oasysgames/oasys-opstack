@@ -11,7 +11,7 @@ FROM --platform=$BUILDPLATFORM golang:1.21.3-bullseye as builder
 ARG TARGETOS
 ARG TARGETARCH
 
-RUN apt update && apt install -y git jq bash
+RUN apt update && apt install -y git jq bash ca-certificates
 
 # We copy the go.mod/sum first, so the `go mod download` does not have to re-run if dependencies do not change.
 COPY ./go.mod /app/go.mod
@@ -85,28 +85,32 @@ ARG OP_PROPOSER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/root/.cache/go-build cd op-proposer && make op-proposer  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_PROPOSER_VERSION"
 
+# Base layer for all services.
+FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as appbase
+COPY --from=builder /etc/ssl /etc/ssl
+COPY --from=builder /usr/share/ca-certificates /usr/share/ca-certificates
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as cannon-target
+FROM --platform=$TARGETPLATFORM appbase as cannon-target
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 CMD ["cannon"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-program-target
+FROM --platform=$TARGETPLATFORM appbase as op-program-target
 COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
 CMD ["op-program"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-heartbeat-target
+FROM --platform=$TARGETPLATFORM appbase as op-heartbeat-target
 COPY --from=op-heartbeat-builder /app/op-heartbeat/bin/op-heartbeat /usr/local/bin/
 CMD ["op-heartbeat"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-wheel-target
+FROM --platform=$TARGETPLATFORM appbase as op-wheel-target
 COPY --from=op-wheel-builder /app/op-wheel/bin/op-wheel /usr/local/bin/
 CMD ["op-wheel"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-node-target
+FROM --platform=$TARGETPLATFORM appbase as op-node-target
 COPY --from=op-node-builder /app/op-node/bin/op-node /usr/local/bin/
 CMD ["op-node"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-challenger-target
+FROM --platform=$TARGETPLATFORM appbase as op-challenger-target
 COPY --from=op-challenger-builder /app/op-challenger/bin/op-challenger /usr/local/bin/
 # Make the bundled op-program the default cannon server
 COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
@@ -116,11 +120,11 @@ COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 ENV OP_CHALLENGER_CANNON_BIN /usr/local/bin/cannon
 CMD ["op-challenger"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-batcher-target
+FROM --platform=$TARGETPLATFORM appbase as op-batcher-target
 COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
 CMD ["op-batcher"]
 
-FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-proposer-target
+FROM --platform=$TARGETPLATFORM appbase as op-proposer-target
 COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
 CMD ["op-proposer"]
 
