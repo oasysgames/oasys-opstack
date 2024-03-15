@@ -306,6 +306,7 @@ contract Build is Script {
             l2OutputOracleProposer: deployCfg.l2OutputOracleProposer,
             l2OutputOracleChallenger: deployCfg.l2OutputOracleChallenger,
             batchSenderAddress: deployCfg.batchSenderAddress,
+            p2pSequencerAddress: deployCfg.p2pSequencerAddress,
             l2BlockTime: deployCfg.l2BlockTime,
             l2GasLimit: uint64(deployCfg.l2GenesisBlockGasLimit),
             l2OutputOracleSubmissionInterval: deployCfg.l2OutputOracleSubmissionInterval,
