@@ -15,6 +15,10 @@ interface IL1BuildAgent {
         // The address of the l2 transaction batch sender. This address is recorded in SystemConfig contract.
         // Value: depending on each verse
         address batchSenderAddress;
+        // The address of the p2p sequencer. This address is recorded in SystemConfig contract.
+        // This address sign the block for p2p sync.
+        // Value: depending on each verse
+        address p2pSequencerAddress;
         // the block time of l2 chain
         // Value: 2s
         uint256 l2BlockTime;
@@ -43,8 +47,23 @@ interface IL1BuildAgent {
         uint256 l2OutputOracleStartingTimestamp;
     }
 
+    /// @notice The address list of the built L1 contract set
+    struct BuiltAddressList {
+        address proxyAdmin;
+        address systemConfig;
+        address l1StandardBridge;
+        address l1ERC721Bridge;
+        address l1CrossDomainMessenger;
+        address oasysL2OutputOracle;
+        address oasysPortal;
+        address protocolVersions;
+        address batchInbox;
+        address addressManager;
+    }
+
     /// @notice Event emitted when the L1 contract set is deployed
     event Deployed(
+        uint256 indexed chainId,
         address owner,
         address proxyAdmin,
         address[7] proxys,
@@ -53,7 +72,7 @@ interface IL1BuildAgent {
         address addressManager
     );
 
-    function chainSystemConfig(uint256 chainId) external view returns (address systemConfig);
+    function builtLists(uint256 chainId) external view returns (address, address, address, address, address, address, address, address, address, address);
 
     function chainIds(uint256 index) external view returns (uint256 chainId);
 
