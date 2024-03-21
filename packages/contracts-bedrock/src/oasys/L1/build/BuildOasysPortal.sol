@@ -27,7 +27,7 @@ contract BuildOasysPortal is IBuildOasysPortal, ISemver {
             abi.encode(
                 _l2Oracle,
                 _guardian,
-                false, // _paused
+                true, // _paused
                 _systemConfig
             )
         );
