@@ -72,7 +72,10 @@ interface IL1BuildAgent {
         address addressManager
     );
 
-    function builtLists(uint256 chainId) external view returns (address, address, address, address, address, address, address, address, address, address);
+    function builtLists(uint256 chainId)
+        external
+        view
+        returns (address, address, address, address, address, address, address, address, address, address);
 
     function chainIds(uint256 index) external view returns (uint256 chainId);
 
