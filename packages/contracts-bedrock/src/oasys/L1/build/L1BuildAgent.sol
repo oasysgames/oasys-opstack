@@ -59,9 +59,11 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     /// @custom:semver 2.0.0
     string public constant version = "2.0.0";
 
-    /// @notice The map of chainId => SystemConfig contract address
-    ///         The SystemConfig holds the addresses of the other contracts, So agent don't manage it
-    mapping(uint256 => address) public chainSystemConfig;
+    /// @notice The map of chainId => builder
+    mapping(uint256 => address) public builders;
+
+    /// @notice The map of chainId => BuiltAddressList
+    mapping(uint256 => BuiltAddressList) public builtLists;
 
     /// @notice List of chainIds that have been deployed, Return all chainIds at once
     ///         The size of the array isn't a concern; the limitation lies in the gas cost and comuputaion time.
@@ -119,6 +121,10 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         // Mark this builder as built.
         L1_BUILD_DEPOSIT.build(msg.sender);
 
+        // register the builder
+        // Mark this chainId as built
+        builders[_chainId] = msg.sender;
+
         // temporarily set the admin to this contract
         // transfer ownership to the final system owner at the end of building
         address admin = address(this);
@@ -141,7 +147,22 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         // L2 tx bathch is sent to this address
         address batchInbox = computeInboxAddress(_chainId);
 
-        emit Deployed(_cfg.finalSystemOwner, address(proxyAdmin), proxys, impls, batchInbox, addressManager);
+        emit Deployed(_chainId, _cfg.finalSystemOwner, address(proxyAdmin), proxys, impls, batchInbox, addressManager);
+
+        // register built addresses to the builtLists
+        builtLists[_chainId].proxyAdmin = address(proxyAdmin);
+        builtLists[_chainId].systemConfig = proxys[2];
+        builtLists[_chainId].l1StandardBridge = proxys[4];
+        builtLists[_chainId].l1ERC721Bridge = proxys[5];
+        builtLists[_chainId].l1CrossDomainMessenger = proxys[3];
+        builtLists[_chainId].oasysL2OutputOracle = proxys[1];
+        builtLists[_chainId].oasysPortal = proxys[0];
+        builtLists[_chainId].protocolVersions = proxys[6];
+        builtLists[_chainId].batchInbox = batchInbox;
+        builtLists[_chainId].addressManager = addressManager;
+
+        // append the chainId to the list
+        chainIds.push(_chainId);
 
         // initialize each contracts by calling `initialize` functions through proxys
         _initializeSystemConfig(_cfg, proxyAdmin, impls[2], proxys);
@@ -154,11 +175,6 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
         // transfer ownership of the proxy admin to the final system owner
         _transferProxyAdminOwnership(_cfg, proxyAdmin);
-
-        // register `SystemConfig` proxy address to `chainSystemConfig`
-        chainSystemConfig[_chainId] = proxys[2];
-        // append the chainId to the list
-        chainIds.push(_chainId);
 
         return (address(proxyAdmin), proxys, impls, batchInbox, addressManager);
     }
@@ -183,7 +199,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     }
 
     function _isInternallyUniqueChainId(uint256 _chainId) internal view returns (bool) {
-        return chainSystemConfig[_chainId] == address(0);
+        return builders[_chainId] == address(0);
     }
 
     function _requiresDepositCheck(uint256 _chainId) internal view returns (bool) {
@@ -332,9 +348,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
                 _owner: _cfg.finalSystemOwner,
                 _batcherHash: bytes32(uint256(uint160(_cfg.batchSenderAddress))),
                 _config: Constants.DEFAULT_RESOURCE_CONFIG(),
-                // This is originally `p2pSequencerAddress` which sign the block for p2p propagation
-                // Don't distinguish between sequencer and p2pSequencerAddress(=unsafeBlockSigner)
-                _unsafeBlockSigner: _cfg.l2OutputOracleProposer,
+                // unsafeBlockSigner is same as p2pSequencerAddress
+                // This address signs the unsafe block. The signed unsafe block is broadcasted to other p2p peers.
+                _unsafeBlockSigner: _cfg.p2pSequencerAddress,
                 // gasPriceOracleOverhead
                 // The rollup gas of L2 txs batch is calculated by the size of L2 data. This overhead is added to it.
                 // The value bellow is the same as the value of the Opstack Mainnet

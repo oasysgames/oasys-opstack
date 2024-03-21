@@ -64,6 +64,15 @@ contract OasysPortal is OptimismPortal {
     /// @return Whether or not the finalization period has elapsed.
     function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view override returns (bool) {
         if (messageRelayer != address(0) && msg.sender == messageRelayer) {
+            // NOTE:
+            // The `_timestamp` is the timestamp of prove tx, not the one of the L2 withdrawal state root.
+            // Although the original schema of instant verification verifies the state root of the L2 withdrawal tx,
+            // we wait until the verified timestamp overtakes the proposed L2 state root timestamp.
+            // This decision is made to address security threats that OpStack is considering.
+            // OpStack separates withdrawals into two steps to counteract fraudulent proofs of withdrawal.
+            // We are following this approach to allow room for opposition,
+            // Therefore, we wait based on the proven tx timestamp.
+            // Ref: https://github.com/oasysgames/oasys-opstack/issues/118
             //slither-disable-next-line calls-inside-a-loop
             uint256 verified = IOasysL2OutputOracle(address(L2_ORACLE)).verifiedL1Timestamp();
             if (verified > _timestamp) {
