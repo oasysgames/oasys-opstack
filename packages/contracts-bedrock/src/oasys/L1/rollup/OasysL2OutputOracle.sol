@@ -127,12 +127,14 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
         view
         returns (bool)
     {
+        require(l2OutputIndex < l2Outputs.length, "OasysL2OutputOracle: l2OutputIndex out of bounds");
         Types.OutputProposal memory expect = l2Outputs[l2OutputIndex];
         return keccak256(abi.encodePacked(actual.outputRoot, actual.timestamp, actual.l2BlockNumber))
             == keccak256(abi.encodePacked(expect.outputRoot, expect.timestamp, expect.l2BlockNumber));
     }
 
     function _isOutputFinalized(uint256 l2OutputIndex) internal view returns (bool) {
+        require(l2OutputIndex < l2Outputs.length, "OasysL2OutputOracle: l2OutputIndex out of bounds");
         if (l2OutputIndex < nextVerifyIndex) {
             return true;
         }
