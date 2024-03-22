@@ -73,6 +73,7 @@ contract SetupL1BuildAgent is Test {
     address proposer = makeAddr("proposer");
     address challenger = makeAddr("challenger");
     address batcher = makeAddr("batcher");
+    address p2pSequencer = makeAddr("p2pSequencer");
 
     // Dependency contracts
     IPermissionedContractFactory permissionedFactory;
@@ -103,6 +104,7 @@ contract SetupL1BuildAgent is Test {
                 l2OutputOracleProposer: proposer,
                 l2OutputOracleChallenger: challenger,
                 batchSenderAddress: batcher,
+                p2pSequencerAddress: p2pSequencer,
                 l2BlockTime: 5,
                 l2GasLimit: 50_000_000,
                 l2OutputOracleSubmissionInterval: 50,
@@ -113,14 +115,15 @@ contract SetupL1BuildAgent is Test {
         );
 
         console.log("\nWallets");
-        console.log("alice      : %s", alice);
-        console.log("bob        : %s", bob);
-        console.log("depositor  : %s", depositor);
-        console.log("builder    : %s", builder);
-        console.log("finalOwner : %s", finalOwner);
-        console.log("proposer   : %s", proposer);
-        console.log("challenger : %s", challenger);
-        console.log("batcher    : %s", batcher);
+        console.log("alice        : %s", alice);
+        console.log("bob          : %s", bob);
+        console.log("depositor    : %s", depositor);
+        console.log("builder      : %s", builder);
+        console.log("finalOwner   : %s", finalOwner);
+        console.log("proposer     : %s", proposer);
+        console.log("challenger   : %s", challenger);
+        console.log("batcher      : %s", batcher);
+        console.log("p2pSequencer : %s", p2pSequencer);
 
         console.log("\nDependency contracts");
         console.log("PermissionedContractFactory : %s", address(permissionedFactory));

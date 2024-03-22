@@ -204,7 +204,7 @@ contract L1BuildAgentTest is SetupL1BuildAgent {
     }
 
     function test_SystemConfig_unsafeBlockSigner() external view {
-        assert(deployment.systemConfig.unsafeBlockSigner() == deployment.buildCfg.l2OutputOracleProposer);
+        assert(deployment.systemConfig.unsafeBlockSigner() == deployment.buildCfg.p2pSequencerAddress);
         assert(deployment.systemConfigImpl.unsafeBlockSigner() == address(0));
     }
 
