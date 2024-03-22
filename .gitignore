@@ -12,6 +12,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/plugins
 .pnp.*
+.node-version
 
 dist
 artifacts

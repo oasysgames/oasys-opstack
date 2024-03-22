@@ -18,44 +18,26 @@ import { BuildSystemConfig } from "src/oasys/L1/build/BuildSystemConfig.sol";
 import { BuildProtocolVersions } from "src/oasys/L1/build/BuildProtocolVersions.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
 import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
+import { IPermissionedContractFactory } from "src/oasys/L1/interfaces/IPermissionedContractFactory.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Path } from "./_path.sol";
-
-interface PermissionedContractFactory {
-    /**
-     * @dev creates a new contract using the `CREATE2` opcode.
-     * Only callers granted with the `CONTRACT_CREATOR_ROLE` are permitted to call it.
-     * The caller must send the expected new contract address for deployment.
-     * If the expected address does not match the newly created one, the execution will be reverted.
-     *
-     * @param tag Registerd as metadata, we intended to set it as a contract name. this can be empty string
-     *
-     */
-    function create(
-        uint256 amount,
-        bytes32 salt,
-        bytes memory bytecode,
-        address expected,
-        string calldata tag
-    )
-        external
-        payable
-        returns (address addr);
-
-    /**
-     * @dev computes the address of a contract that would be created using the `CREATE2` opcode.
-     * The address is computed using the provided salt and bytecode.
-     */
-    function getDeploymentAddress(bytes32 salt, bytes memory bytecode) external view returns (address addr);
-}
 
 contract Deploy is Script {
     using stdJson for string;
 
+    struct DeployConfig {
+        address msgSender;
+        string deployOutDir;
+        string deployLatestOutPath;
+        string deployRunOutPath;
+    }
+
     bytes32 salt;
-    PermissionedContractFactory pcc;
+    IPermissionedContractFactory permissionedFactory;
     IL1BuildAgent legacyL1BuildAgent;
     IL1BuildDeposit legacyL1BuildDeposit;
+
+    DeployConfig cfg;
 
     struct BuildContracts {
         address Proxy;
@@ -69,18 +51,30 @@ contract Deploy is Script {
     }
 
     function setUp() public virtual {
-        vm.createDir({ path: Path.deployOutDir(), recursive: true });
-
         salt = keccak256(bytes(vm.envString("SALT")));
-        pcc = PermissionedContractFactory(0x520000000000000000000000000000000000002F);
-        legacyL1BuildAgent = IL1BuildAgent(0x5200000000000000000000000000000000000008);
-        legacyL1BuildDeposit = IL1BuildDeposit(0x5200000000000000000000000000000000000007);
+        permissionedFactory =
+            IPermissionedContractFactory(vm.envOr("PERMISSIONED_FACTORY", 0x520000000000000000000000000000000000002F));
+        legacyL1BuildAgent = IL1BuildAgent(vm.envOr("LEGACY_AGENT", 0x5200000000000000000000000000000000000008));
+        legacyL1BuildDeposit = IL1BuildDeposit(vm.envOr("LEGACY_DEPOSIT", 0x5200000000000000000000000000000000000007));
 
-        console.log("Sender: %s", msg.sender);
-        console.log("Salt: %s", vm.toString(salt));
+        cfg = DeployConfig({
+            msgSender: msg.sender,
+            deployOutDir: Path.deployOutDir(),
+            deployLatestOutPath: Path.deployLatestOutPath(),
+            deployRunOutPath: Path.deployRunOutPath()
+        });
+    }
+
+    function setDeployConfig(DeployConfig memory _cfg) public {
+        cfg = _cfg;
     }
 
     function run() public {
+        console.log("Sender: %s", cfg.msgSender);
+        console.log("Salt: %s", vm.toString(salt));
+
+        vm.createDir({ path: cfg.deployOutDir, recursive: true });
+
         vm.startBroadcast();
 
         BuildContracts memory builts = _deployBuildContracts();
@@ -106,13 +100,13 @@ contract Deploy is Script {
 
         _writeJson(pAgent, pDeposit, pL2ooVerifier, builts);
 
-        console.log("Output: %s", Path.deployLatestOutPath());
-        console.log("Output: %s", Path.deployRunOutPath());
+        console.log("Output: %s", cfg.deployLatestOutPath);
+        console.log("Output: %s", cfg.deployRunOutPath);
     }
 
     function _deploy(string memory contractName, bytes memory deployBytecode) internal returns (address deployment) {
-        deployment = pcc.getDeploymentAddress(salt, deployBytecode);
-        pcc.create(0, salt, deployBytecode, deployment, contractName);
+        deployment = permissionedFactory.getDeploymentAddress(salt, deployBytecode);
+        permissionedFactory.create(0, salt, deployBytecode, deployment, contractName);
     }
 
     function _deployWithCustomSalt(
@@ -123,14 +117,14 @@ contract Deploy is Script {
         internal
         returns (address deployment)
     {
-        deployment = pcc.getDeploymentAddress(_salt, deployBytecode);
-        pcc.create(0, _salt, deployBytecode, deployment, contractName);
+        deployment = permissionedFactory.getDeploymentAddress(_salt, deployBytecode);
+        permissionedFactory.create(0, _salt, deployBytecode, deployment, contractName);
     }
 
     // Deploy proxies for L1BuildDeposit and L1BuildAgent and OasysL2OutputOracleVerifier
     function _deployProxies() internal returns (address, address, address) {
         // Authorized to upgrade L1BuildAgent and L1BuildDeposit and OasysL2OutputOracleVerifier
-        address admin = msg.sender;
+        address admin = cfg.msgSender;
         address pAgent = _deployWithCustomSalt(
             "Proxy",
             abi.encodePacked(type(Proxy).creationCode, abi.encode(admin)),
@@ -158,8 +152,8 @@ contract Deploy is Script {
                 abi.encode(
                     1 ether, // requiredAmount,
                     100, // lockedBlock,
-                    agent,
-                    legacyL1BuildDeposit
+                    agent, // _agentAddress
+                    legacyL1BuildDeposit // _legacyL1BuildDeposit
                 )
             )
         );
@@ -244,7 +238,7 @@ contract Deploy is Script {
         json.serialize("BuildL1ERC721Bridge", builts.L1ERC721Bridge);
         json = json.serialize("BuildProtocolVersions", builts.ProtocolVersions);
 
-        json.write(Path.deployLatestOutPath());
-        json.write(Path.deployRunOutPath());
+        json.write(cfg.deployLatestOutPath);
+        json.write(cfg.deployRunOutPath);
     }
 }
