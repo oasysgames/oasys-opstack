@@ -10,7 +10,7 @@ import { AddressManager } from "src/legacy/AddressManager.sol";
 import { ProtocolVersion } from "src/L1/ProtocolVersions.sol";
 import { ISemver } from "src/universal/ISemver.sol";
 import { Constants } from "src/libraries/Constants.sol";
-import { Predeploys } from "src/libraries/Predeploys.sol";
+import { L2PredeployAddresses } from "src/oasys/L2/L2PredeployAddresses.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
 import { IL1BuildDeposit } from "src/oasys/L1/build/interfaces/IL1BuildDeposit.sol";
 import { IBuildProxy } from "src/oasys/L1/build/interfaces/IBuildProxy.sol";
@@ -315,8 +315,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         impls[5] = _deployImplementation(
             BUILD_L1_ERC721_BRIDGE.deployBytecode({
                 _messenger: proxys[3], // L1CrossDomainMessengerProxy
-                _otherBridge: Predeploys.L2_ERC721_BRIDGE // TODO: Using Oasys ERC721 bridge?
-             })
+                _otherBridge: L2PredeployAddresses.L2_ERC721_BRIDGE
+            })
         );
 
         impls[6] = _deployImplementation(BUILD_PROTOCOL_VERSIONS.deployBytecode());

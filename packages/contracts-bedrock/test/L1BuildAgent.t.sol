@@ -253,8 +253,8 @@ contract L1BuildAgentTest is SetupL1BuildAgent {
     }
 
     function test_L1ERC721Bridge_OTHER_BRIDGE() external view {
-        assert(address(deployment.l1ERC721Bridge.OTHER_BRIDGE()) == 0x4200000000000000000000000000000000000014);
-        assert(address(deployment.l1ERC721BridgeImpl.OTHER_BRIDGE()) == 0x4200000000000000000000000000000000000014);
+        assert(address(deployment.l1ERC721Bridge.OTHER_BRIDGE()) == 0x6200000000000000000000000000000000000001);
+        assert(address(deployment.l1ERC721BridgeImpl.OTHER_BRIDGE()) == 0x6200000000000000000000000000000000000001);
     }
 
     function test_L1ERC721Bridge_bridgeERC721() external {
