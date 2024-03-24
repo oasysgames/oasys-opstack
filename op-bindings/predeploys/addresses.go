@@ -18,7 +18,7 @@ const (
 	L1Block                       = "0x4200000000000000000000000000000000000015"
 	GovernanceToken               = "0x4200000000000000000000000000000000000042"
 	LegacyMessagePasser           = "0x4200000000000000000000000000000000000000"
-	L2ERC721Bridge                = "0x4200000000000000000000000000000000000014"
+	OPStackL2ERC721Bridge         = "0x4200000000000000000000000000000000000014" // Reserved(but do not use)
 	OptimismMintableERC721Factory = "0x4200000000000000000000000000000000000017"
 	ProxyAdmin                    = "0x4200000000000000000000000000000000000018"
 	BaseFeeVault                  = "0x4200000000000000000000000000000000000019"
@@ -26,6 +26,9 @@ const (
 	SchemaRegistry                = "0x4200000000000000000000000000000000000020"
 	EAS                           = "0x4200000000000000000000000000000000000021"
 	Create2Deployer               = "0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"
+
+	// Oasys' L2 ERC721 Bridge was released before OPStack and has a different address.
+	OasysL2ERC721Bridge = "0x6200000000000000000000000000000000000001"
 )
 
 var (
@@ -41,7 +44,9 @@ var (
 	L1BlockAddr                       = common.HexToAddress(L1Block)
 	GovernanceTokenAddr               = common.HexToAddress(GovernanceToken)
 	LegacyMessagePasserAddr           = common.HexToAddress(LegacyMessagePasser)
-	L2ERC721BridgeAddr                = common.HexToAddress(L2ERC721Bridge)
+	L2ERC721BridgeAddr                = common.HexToAddress(OasysL2ERC721Bridge)
+	OPStackL2ERC721BridgeAddr         = common.HexToAddress(OPStackL2ERC721Bridge)
+	OasysL2ERC721BridgeAddr           = common.HexToAddress(OasysL2ERC721Bridge)
 	OptimismMintableERC721FactoryAddr = common.HexToAddress(OptimismMintableERC721Factory)
 	ProxyAdminAddr                    = common.HexToAddress(ProxyAdmin)
 	BaseFeeVaultAddr                  = common.HexToAddress(BaseFeeVault)

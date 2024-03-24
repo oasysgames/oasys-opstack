@@ -13,6 +13,7 @@ yarn-error.log
 !.yarn/plugins
 .pnp.*
 .node-version
+.go-version
 
 dist
 artifacts

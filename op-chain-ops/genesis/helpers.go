@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -26,6 +27,12 @@ var (
 	ImplementationSlot = common.HexToHash("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
 	// AdminSlot represents the EIP 1967 admin storage slot
 	AdminSlot = common.HexToHash("0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103")
+
+	// Namespace for L2 predeploy contracts made by Oasys.
+	oasysCodeNamespace           = common.HexToAddress("0xC0F6C0f6C0F6C0f6C0f6c0F6C0f6C0F6c0f60000")
+	bigOasysCodeNamespace        = new(big.Int).SetBytes(oasysCodeNamespace.Bytes())
+	oasysL2PredeployNamespace    = common.HexToAddress("0x6200000000000000000000000000000000000000")
+	OasysBigL2PredeployNamespace = new(big.Int).SetBytes(oasysL2PredeployNamespace.Bytes())
 )
 
 // DevAccounts represent the standard hardhat development accounts.
@@ -65,11 +72,15 @@ var devBalance = hexutil.MustDecodeBig("0x20000000000000000000000000000000000000
 // AddressToCodeNamespace takes a predeploy address and computes
 // the implementation address that the implementation should be deployed at
 func AddressToCodeNamespace(addr common.Address) (common.Address, error) {
-	if !IsL2DevPredeploy(addr) {
+	if addr == predeploys.OPStackL2ERC721BridgeAddr {
+		return common.Address{}, fmt.Errorf("do not use the OPStack's L2ERC721Bridge")
+	}
+	namespace := getCodeNamespace(addr)
+	if namespace == nil {
 		return common.Address{}, fmt.Errorf("cannot handle non predeploy: %s", addr)
 	}
 	bigAddress := new(big.Int).SetBytes(addr[18:])
-	num := new(big.Int).Or(bigCodeNamespace, bigAddress)
+	num := new(big.Int).Or(namespace, bigAddress)
 	return common.BigToAddress(num), nil
 }
 
@@ -106,4 +117,14 @@ func newHexBig(in uint64) *hexutil.Big {
 	b := new(big.Int).SetUint64(in)
 	hb := hexutil.Big(*b)
 	return &hb
+}
+
+func getCodeNamespace(addr common.Address) *big.Int {
+	if bytes.Equal(addr[0:2], []byte{0x42, 0x00}) {
+		return bigCodeNamespace
+	}
+	if bytes.Equal(addr[0:2], []byte{0x62, 0x00}) {
+		return bigOasysCodeNamespace
+	}
+	return nil
 }

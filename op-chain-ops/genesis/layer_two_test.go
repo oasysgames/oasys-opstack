@@ -91,7 +91,12 @@ func TestBuildL2MainnetGenesis(t *testing.T) {
 	config.EnableGovernance = true
 	config.FundDevAccounts = false
 	gen := testBuildL2Genesis(t, config)
-	require.Equal(t, 2323, len(gen.Alloc))
+	expect :=
+		256 + // `SetPrecompileBalances()`
+			2048 + // `setProxies()` with BigL2PredeployNamespace
+			256 + // `setProxies()` with OasysBigL2PredeployNamespace
+			20 // Implementations
+	require.Equal(t, expect, len(gen.Alloc))
 }
 
 func TestBuildL2MainnetNoGovernanceGenesis(t *testing.T) {
@@ -100,5 +105,10 @@ func TestBuildL2MainnetNoGovernanceGenesis(t *testing.T) {
 	config.EnableGovernance = false
 	config.FundDevAccounts = false
 	gen := testBuildL2Genesis(t, config)
-	require.Equal(t, 2323, len(gen.Alloc))
+	expect :=
+		256 + // `SetPrecompileBalances()`
+			2048 + // `setProxies()` with BigL2PredeployNamespace
+			256 + // `setProxies()` with OasysBigL2PredeployNamespace
+			20 // Implementations
+	require.Equal(t, expect, len(gen.Alloc))
 }

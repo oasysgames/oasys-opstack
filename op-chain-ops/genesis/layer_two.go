@@ -43,6 +43,10 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 	if err != nil {
 		return nil, err
 	}
+	err = setProxies(db, predeploys.ProxyAdminAddr, OasysBigL2PredeployNamespace, 256)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set up the implementations
 	deployResults, err := immutables.BuildOptimism(immutable)
