@@ -35,6 +35,9 @@ type CLIConfig struct {
 	// AllowNonFinalized can be set to true to propose outputs
 	// for L2 blocks derived from non-finalized L1 data.
 	AllowNonFinalized bool
+	// OmitL1BlockHashInProposals can be set to true to propose
+	// zero hash for l1 blocks
+	OmitL1BlockHashInProposals bool
 
 	TxMgrConfig txmgr.CLIConfig
 
@@ -73,10 +76,11 @@ func NewConfig(ctx *cli.Context) *CLIConfig {
 		PollInterval: ctx.Duration(flags.PollIntervalFlag.Name),
 		TxMgrConfig:  txmgr.ReadCLIConfig(ctx),
 		// Optional Flags
-		AllowNonFinalized: ctx.Bool(flags.AllowNonFinalizedFlag.Name),
-		RPCConfig:         oprpc.ReadCLIConfig(ctx),
-		LogConfig:         oplog.ReadCLIConfig(ctx),
-		MetricsConfig:     opmetrics.ReadCLIConfig(ctx),
-		PprofConfig:       oppprof.ReadCLIConfig(ctx),
+		AllowNonFinalized:          ctx.Bool(flags.AllowNonFinalizedFlag.Name),
+		OmitL1BlockHashInProposals: ctx.Bool(flags.OmitL1BlockHashInProposalsFlag.Name),
+		RPCConfig:                  oprpc.ReadCLIConfig(ctx),
+		LogConfig:                  oplog.ReadCLIConfig(ctx),
+		MetricsConfig:              opmetrics.ReadCLIConfig(ctx),
+		PprofConfig:                oppprof.ReadCLIConfig(ctx),
 	}
 }
