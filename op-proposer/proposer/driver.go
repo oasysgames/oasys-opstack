@@ -220,7 +220,11 @@ func (l *L2OutputSubmitter) fetchOutput(ctx context.Context, block *big.Int) (*e
 
 // ProposeL2OutputTxData creates the transaction data for the ProposeL2Output function
 func (l *L2OutputSubmitter) ProposeL2OutputTxData(output *eth.OutputResponse) ([]byte, error) {
-	return proposeL2OutputTxData(l.l2ooABI, output)
+	if l.Cfg.OmitBlockHashInProposals {
+		return proposeL2OutputZeroBlockHashTxData(l.l2ooABI, output)
+	} else {
+		return proposeL2OutputTxData(l.l2ooABI, output)
+	}
 }
 
 // proposeL2OutputTxData creates the transaction data for the ProposeL2Output function
@@ -230,7 +234,19 @@ func proposeL2OutputTxData(abi *abi.ABI, output *eth.OutputResponse) ([]byte, er
 		output.OutputRoot,
 		new(big.Int).SetUint64(output.BlockRef.Number),
 		output.Status.CurrentL1.Hash,
-		new(big.Int).SetUint64(output.Status.CurrentL1.Number))
+		new(big.Int).SetUint64(output.Status.CurrentL1.Number),
+	)
+}
+
+// proposeL2OutputTxData creates the transaction data for the ProposeL2Output function with zero blockhash value
+func proposeL2OutputZeroBlockHashTxData(abi *abi.ABI, output *eth.OutputResponse) ([]byte, error) {
+	return abi.Pack(
+		"proposeL2Output",
+		output.OutputRoot,
+		new(big.Int).SetUint64(output.BlockRef.Number),
+		[32]byte{},
+		common.Big0,
+	)
 }
 
 // We wait until l1head advances beyond blocknum. This is used to make sure proposal tx won't

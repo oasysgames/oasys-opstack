@@ -51,9 +51,9 @@ var (
 		EnvVars: prefixEnvVars("ALLOW_NON_FINALIZED"),
 	}
 	OmitL1BlockHashInProposalsFlag = &cli.BoolFlag{
-		Name:  "omit-l1blockhash-in-proposals",
-		Usage: "Proposal will not submit the blockhash in proposal transaction",
-		//Value:   false,
+		Name:    "omit-l1blockhash-in-proposals",
+		Usage:   "Proposal will not submit the blockhash in proposal transaction",
+		Value:   false,
 		EnvVars: prefixEnvVars("OMIT_L1_BLOCKHASH_IN_PROPOSALS"),
 	}
 	// Legacy Flags
@@ -70,6 +70,7 @@ var optionalFlags = []cli.Flag{
 	PollIntervalFlag,
 	AllowNonFinalizedFlag,
 	L2OutputHDPathFlag,
+	OmitL1BlockHashInProposalsFlag,
 }
 
 func init() {
