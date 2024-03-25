@@ -35,6 +35,7 @@ type CLIConfig struct {
 	// AllowNonFinalized can be set to true to propose outputs
 	// for L2 blocks derived from non-finalized L1 data.
 	AllowNonFinalized bool
+
 	// OmitL1BlockHashInProposals can be set to true to propose
 	// zero hash for l1 blocks
 	OmitL1BlockHashInProposals bool
