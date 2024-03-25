@@ -50,6 +50,12 @@ var (
 		Usage:   "Allow the proposer to submit proposals for L2 blocks derived from non-finalized L1 blocks.",
 		EnvVars: prefixEnvVars("ALLOW_NON_FINALIZED"),
 	}
+	OmitL1BlockHashInProposalsFlag = &cli.BoolFlag{
+		Name:    "omit-l1blockhash-in-proposals",
+		Usage:   "Proposal will not submit the blockhash in proposal transaction",
+		Value:   false,
+		EnvVars: prefixEnvVars("OMIT_L1_BLOCKHASH_IN_PROPOSALS"),
+	}
 	// Legacy Flags
 	L2OutputHDPathFlag = txmgr.L2OutputHDPathFlag
 )
@@ -64,6 +70,7 @@ var optionalFlags = []cli.Flag{
 	PollIntervalFlag,
 	AllowNonFinalizedFlag,
 	L2OutputHDPathFlag,
+	OmitL1BlockHashInProposalsFlag,
 }
 
 func init() {
