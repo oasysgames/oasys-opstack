@@ -86,6 +86,8 @@ contract SetupL1BuildAgent is Test {
     /// @dev Default deployment L2
     Deployment deployment;
 
+    address legacyAddressManager;
+
     function setUp() public virtual {
         _addBalanceToTestWallets();
 
@@ -96,10 +98,13 @@ contract SetupL1BuildAgent is Test {
         vm.prank(depositor);
         l1Deposit.deposit{ value: 1 ether }(builder);
 
+        legacyAddressManager = address(0);
+
         vm.prank(builder);
         deployment = _runL1BuildAgent(
             5555,
             IL1BuildAgent.BuildConfig({
+                legacyAddressManager: legacyAddressManager,
                 finalSystemOwner: finalOwner,
                 l2OutputOracleProposer: proposer,
                 l2OutputOracleChallenger: challenger,
@@ -207,29 +212,23 @@ contract SetupL1BuildAgent is Test {
         internal
         returns (Deployment memory)
     {
-        (
-            address proxyAdmin,
-            address[7] memory proxys,
-            address[7] memory impls,
-            address batchInbox,
-            address addressManager
-        ) = l1Agent.build(chainId, cfg);
+        (IL1BuildAgent.BuiltAddressList memory results, address[7] memory impls) = l1Agent.build(chainId, cfg);
 
         return Deployment({
             // Build config
             chainId: chainId,
             buildCfg: cfg,
             // Deployed proxies
-            portal: OasysPortal(payable(proxys[0])),
-            l2Oracle: OasysL2OutputOracle(proxys[1]),
-            systemConfig: SystemConfig(proxys[2]),
-            l1Messenger: L1CrossDomainMessenger(proxys[3]),
-            l1ERC20Bridge: L1StandardBridge(payable(proxys[4])),
-            l1ERC721Bridge: L1ERC721Bridge(proxys[5]),
-            protocolVersions: ProtocolVersions(proxys[6]),
+            portal: OasysPortal(payable(results.oasysPortal)),
+            l2Oracle: OasysL2OutputOracle(results.oasysL2OutputOracle),
+            systemConfig: SystemConfig(results.systemConfig),
+            l1Messenger: L1CrossDomainMessenger(results.l1CrossDomainMessenger),
+            l1ERC20Bridge: L1StandardBridge(payable(results.l1StandardBridge)),
+            l1ERC721Bridge: L1ERC721Bridge(results.l1ERC721Bridge),
+            protocolVersions: ProtocolVersions(results.protocolVersions),
             // Deployed implementations
-            proxyAdmin: ProxyAdmin(proxyAdmin),
-            addressManager: AddressManager(addressManager),
+            proxyAdmin: ProxyAdmin(results.proxyAdmin),
+            addressManager: AddressManager(legacyAddressManager),
             portalImpl: OasysPortal(payable(impls[0])),
             l2OracleImpl: OasysL2OutputOracle(impls[1]),
             systemConfigImpl: SystemConfig(impls[2]),
@@ -238,7 +237,7 @@ contract SetupL1BuildAgent is Test {
             l1ERC721BridgeImpl: L1ERC721Bridge(impls[5]),
             protocolVersionsImpl: ProtocolVersions(impls[6]),
             // Misc
-            batchInbox: batchInbox
+            batchInbox: results.batchInbox
         });
     }
 }

@@ -302,6 +302,7 @@ contract Build is Script {
 
         // construct a build configuration.
         buildCfg = IL1BuildAgent.BuildConfig({
+            legacyAddressManager: address(0),
             finalSystemOwner: deployCfg.finalSystemOwner,
             l2OutputOracleProposer: deployCfg.l2OutputOracleProposer,
             l2OutputOracleChallenger: deployCfg.l2OutputOracleChallenger,
@@ -334,24 +335,26 @@ contract Build is Script {
         deposit.deposit{ value: 1 ether }(msg.sender);
 
         // build L2.
-        (address proxyAdmin, address[7] memory proxys,, address batchInbox, address addressManager) =
-            agent.build(deployCfg.l2ChainID, buildCfg);
+        (IL1BuildAgent.BuiltAddressList memory results,) = agent.build(deployCfg.l2ChainID, buildCfg);
         vm.stopBroadcast();
 
         // set deployed addresses
-        deployCfg.optimismPortalProxy = proxys[0];
-        deployCfg.systemConfigProxy = proxys[2];
-        deployCfg.l1CrossDomainMessengerProxy = proxys[3];
-        deployCfg.l1StandardBridgeProxy = proxys[4];
-        deployCfg.l1ERC721BridgeProxy = proxys[5];
-        deployCfg.batchInboxAddress = batchInbox;
-        address protocolVersions = proxys[6];
-        address l2OutputOracleProxy = proxys[1];
+        deployCfg.optimismPortalProxy = results.oasysPortal;
+        deployCfg.systemConfigProxy = results.systemConfig;
+        deployCfg.l1CrossDomainMessengerProxy = results.l1CrossDomainMessenger;
+        deployCfg.l1StandardBridgeProxy = results.l1StandardBridge;
+        deployCfg.l1ERC721BridgeProxy = results.l1ERC721Bridge;
+        deployCfg.batchInboxAddress = results.batchInbox;
 
         // output opstack configuration files.
         string memory deployCfgJson = _deployConfigJson("DeployConfig");
-        string memory addressesJson =
-            _addressesJson("deployed", proxyAdmin, l2OutputOracleProxy, addressManager, protocolVersions);
+        string memory addressesJson = _addressesJson(
+            "deployed",
+            results.proxyAdmin,
+            results.oasysL2OutputOracle,
+            address(0),
+            results.protocolVersions
+        );
 
         // output to the `./tmp/L1BuildAgent/Build/latest` directory
         _writeJson(deployCfgJson, Path.buildLatestOutDir(), "/deploy-config.json");

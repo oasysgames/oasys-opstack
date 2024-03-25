@@ -36,39 +36,39 @@ contract L1BuildAgentTest is SetupL1BuildAgent {
         assert(deployment.proxyAdmin.owner() == deployment.buildCfg.finalSystemOwner);
     }
 
-    function test_ProxyAdmin_addressManager() external view {
-        assert(address(deployment.proxyAdmin.addressManager()) == address(deployment.addressManager));
-    }
+    // function test_ProxyAdmin_addressManager() external view {
+    //     assert(address(deployment.proxyAdmin.addressManager()) == address(deployment.addressManager));
+    // }
 
     function test_ProxyAdmin_proxyTypes() external view {
         assert(deployment.proxyAdmin.proxyType(address(deployment.portal)) == ProxyAdmin.ProxyType.ERC1967);
         assert(deployment.proxyAdmin.proxyType(address(deployment.l2Oracle)) == ProxyAdmin.ProxyType.ERC1967);
         assert(deployment.proxyAdmin.proxyType(address(deployment.systemConfig)) == ProxyAdmin.ProxyType.ERC1967);
-        assert(deployment.proxyAdmin.proxyType(address(deployment.l1Messenger)) == ProxyAdmin.ProxyType.RESOLVED);
-        assert(deployment.proxyAdmin.proxyType(address(deployment.l1ERC20Bridge)) == ProxyAdmin.ProxyType.CHUGSPLASH);
+        assert(deployment.proxyAdmin.proxyType(address(deployment.l1Messenger)) == ProxyAdmin.ProxyType.ERC1967);
+        assert(deployment.proxyAdmin.proxyType(address(deployment.l1ERC20Bridge)) == ProxyAdmin.ProxyType.ERC1967);
         assert(deployment.proxyAdmin.proxyType(address(deployment.l1ERC721Bridge)) == ProxyAdmin.ProxyType.ERC1967);
         assert(deployment.proxyAdmin.proxyType(address(deployment.protocolVersions)) == ProxyAdmin.ProxyType.ERC1967);
     }
 
-    function test_ProxyAdmin_implementationNames() external view {
-        assert(
-            keccak256(abi.encode(deployment.proxyAdmin.implementationName(address(deployment.l1Messenger))))
-                == keccak256(abi.encode("OVM_L1CrossDomainMessenger"))
-        );
-    }
+    // function test_ProxyAdmin_implementationNames() external view {
+    //     assert(
+    //         keccak256(abi.encode(deployment.proxyAdmin.implementationName(address(deployment.l1Messenger))))
+    //             == keccak256(abi.encode("OVM_L1CrossDomainMessenger"))
+    //     );
+    // }
 
     /**
      * @dev Tests for `AddressManager`
      */
-    function test_AddressManager_owner() external view {
-        assert(deployment.addressManager.owner() == address(deployment.proxyAdmin));
-    }
+    // function test_AddressManager_owner() external view {
+    //     assert(deployment.addressManager.owner() == address(deployment.proxyAdmin));
+    // }
 
-    function test_AddressManager_getAddress_OVM_L1CrossDomainMessenger() external view {
-        assert(
-            deployment.addressManager.getAddress("OVM_L1CrossDomainMessenger") == address(deployment.l1MessengerImpl)
-        );
-    }
+    // function test_AddressManager_getAddress_OVM_L1CrossDomainMessenger() external view {
+    //     assert(
+    //         deployment.addressManager.getAddress("OVM_L1CrossDomainMessenger") == address(deployment.l1MessengerImpl)
+    //     );
+    // }
 
     /**
      * @dev Tests for `OasysPortal`
