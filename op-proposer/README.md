@@ -1,0 +1,2 @@
+## List of Changes by Oasys:
+- Introduced the --omit-l1blockhash-in-proposals flag to assist verses that are stuck in L2 output root proposal due to a delay in proposing more than 256 blocks on L1. [#129](https://github.com/oasysgames/oasys-opstack/pull/129)

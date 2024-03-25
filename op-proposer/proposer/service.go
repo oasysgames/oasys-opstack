@@ -37,6 +37,8 @@ type ProposerConfig struct {
 	// is never valid on an alternative L1 chain that would produce different L2 data.
 	// This option is not necessary when higher proposal latency is acceptable and L1 is healthy.
 	AllowNonFinalized bool
+	// OmitBlockHashInProposals enables op-proposer to send zero bytes for l1 blockhash value
+	OmitBlockHashInProposals bool
 }
 
 type ProposerService struct {
@@ -82,6 +84,7 @@ func (ps *ProposerService) initFromCLIConfig(ctx context.Context, version string
 	ps.PollInterval = cfg.PollInterval
 	ps.NetworkTimeout = cfg.TxMgrConfig.NetworkTimeout
 	ps.AllowNonFinalized = cfg.AllowNonFinalized
+	ps.OmitBlockHashInProposals = cfg.OmitL1BlockHashInProposals
 
 	if err := ps.initRPCClients(ctx, cfg); err != nil {
 		return err
