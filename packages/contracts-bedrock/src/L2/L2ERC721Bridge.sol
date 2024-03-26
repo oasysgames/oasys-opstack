@@ -47,6 +47,7 @@ contract L2ERC721Bridge is ERC721Bridge, ISemver {
         bytes calldata _extraData
     )
         external
+        virtual
         onlyOtherBridge
     {
         require(_localToken != address(this), "L2ERC721Bridge: local token cannot be self");
@@ -82,6 +83,7 @@ contract L2ERC721Bridge is ERC721Bridge, ISemver {
         bytes calldata _extraData
     )
         internal
+        virtual
         override
     {
         require(_remoteToken != address(0), "L2ERC721Bridge: remote token cannot be address(0)");
