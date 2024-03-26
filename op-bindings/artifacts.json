@@ -41,5 +41,9 @@
   "SafeProxyFactory",
   "DelayedVetoable",
   "ISemver",
-  "StorageSetter"
+  "StorageSetter",
+  "OasysL2OutputOracle",
+  "OasysL2OutputOracleVerifier",
+  "OasysL1ERC721Bridge",
+  "OasysL2ERC721Bridge"
 ]
