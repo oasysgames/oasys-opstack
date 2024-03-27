@@ -73,6 +73,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     /// https://betterprogramming.pub/issues-of-returning-arrays-of-dynamic-size-in-solidity-smart-contracts-dd1e54424235
     uint256[] public chainIds;
 
+    /// @notice The flag to pause the L1CrossDomainMessenger
+    bool public messengerPaused;
+
     constructor(
         IBuildProxy _bProxy,
         IBuildOasysL2OutputOracle _bOasysL2OO,
@@ -100,6 +103,50 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         L2OO_VERIFIER = _l2ooVerifier;
     }
 
+
+    /// @notice Pause the legacy L1CrossDomainMessenger
+    ///         This is used when upgrading the existing L2
+    ///         Ref: step2 of `SystemDictator`
+    ///         https://github.com/oasysgames/oasys-opstack/blob/cd7c58349542f9f1ce9fd42c9054aeed1325e02c/packages/contracts-bedrock/contracts/deployment/SystemDictator.sol
+    /// @param addressManager The address manager of the existing L2
+    function pauseLegacyL1CrossDomainMessenger(address addressManager) public {
+        require(!messengerPaused, "L1BuildAgent: already paused");
+
+        messengerPaused = true;
+
+        // Temporarily brick the L1CrossDomainMessenger by setting its implementation address to
+        // address(0) which will cause the ResolvedDelegateProxy to revert. Better than pausing
+        // the L1CrossDomainMessenger via pause() because it can be easily reverted.
+        AddressManager(addressManager).setAddress("OVM_L1CrossDomainMessenger", address(0));
+
+        // Set the DTL shutoff block, which will tell the DTL to stop syncing new deposits from the
+        // CanonicalTransactionChain. We do this by setting an address in the AddressManager
+        // because the DTL already has a reference to the AddressManager and this way we don't also
+        // need to give it a reference to the SystemDictator.
+        AddressManager(addressManager).setAddress(
+            "DTL_SHUTOFF_BLOCK",
+            address(uint160(block.number))
+        );
+    }
+
+    /// @notice Unpause the legacy L1CrossDomainMessenger
+    /// @param addressManager The address manager of the existing L2
+    /// @param oldL1CrossDomainMessenger The address of the old L1CrossDomainMessenger
+    function unpauseLegacyL1CrossDomainMessenger(address addressManager, address oldL1CrossDomainMessenger) public {
+        require(messengerPaused, "L1BuildAgent: not paused");
+
+        messengerPaused = false;
+
+        // Reset the L1CrossDomainMessenger to the old implementation.
+        AddressManager(addressManager).setAddress(
+            "OVM_L1CrossDomainMessenger",
+            oldL1CrossDomainMessenger
+        );
+
+        // Unset the DTL shutoff block which will allow the DTL to sync again.
+        AddressManager(addressManager).setAddress("DTL_SHUTOFF_BLOCK", address(0));
+    }
+
     /// @notice Deploy the L1 contract set to build Verse, This is th main function.
     /// @param _chainId The chainId of Verse
     /// @param _cfg The configuration of the L1 contract set
@@ -110,6 +157,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         external
         returns (BuiltAddressList memory, address[7] memory)
     {
+
         // Only the builder can build the L2
         // The builder is the person who deposits the required amount
         address builder = msg.sender;
@@ -144,8 +192,12 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         ProxyAdmin proxyAdmin = _deployProxies(_chainId, admin, _cfg.legacyAddressManager);
 
         if (isUpgradingExistingL2) {
-            // Pause the legacy L1CrossDomainMessenger
-            _pauseLegacyL1CrossDomainMessenger(_cfg.legacyAddressManager);
+            if (!messengerPaused) {
+                // Pause the legacy L1CrossDomainMessenger
+                pauseLegacyL1CrossDomainMessenger(_cfg.legacyAddressManager);
+            }
+            // Remove deprecated addresses from the AddressManager
+            _removeDeprecatedAddresses(_cfg.legacyAddressManager);
             // Set the address of the AddressManager.
             proxyAdmin.setAddressManager(AddressManager(_cfg.legacyAddressManager));
             require(proxyAdmin.addressManager() == AddressManager(_cfg.legacyAddressManager));
@@ -164,11 +216,13 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
         // initialize each contracts by calling `initialize` functions through proxys
         _initializeSystemConfig(_chainId, _cfg, proxyAdmin, impls[2]);
+        // OasysPortal should be initialized before L1StandardBridge,
+        // because L1StandardBridge uses OasysPortal as a recipient of the ETH
+        _initializeOasysPortal(_chainId, proxyAdmin, impls[0]);
         _initializeL1StandardBridge(_chainId, proxyAdmin, impls[4], isUpgradingExistingL2);
         _initializeL1ERC721Bridge(_chainId, proxyAdmin, impls[5], isUpgradingExistingL2);
         _initializeL1CrossDomainMessenger(_chainId, proxyAdmin, impls[3], isUpgradingExistingL2);
         _initializeOasysL2OutputOracle(_chainId, _cfg, proxyAdmin, impls[1]);
-        _initializeOasysPortal(_chainId, proxyAdmin, impls[0]);
         _initializeProtocolVersions(_chainId, _cfg, proxyAdmin, impls[6]);
 
         // transfer ownership of the proxy admin to the final system owner
@@ -249,11 +303,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         if (addressManager != address(0)) {
             // upgrading existing L2
             // Don't deply proxy, as the existing L2 already has the proxy(RelolvedDelegateProxy)
-            string memory contractName = "OVM_L1CrossDomainMessenger";
+            string memory contractName = "Proxy__OVM_L1CrossDomainMessenger";
             addr = AddressManager(addressManager).getAddress(contractName);
             require(addr != address(0), "L1BuildAgent: failed to find L1CrossDomainMessengerProxy from AddressManager");
-            // Trasfer ownership to ProxyAdmin
-            // ResolvedDelegateProxy(payable(addr)).setOwner(address(proxyAdmin));
         } else {
             addr = _deployProxy(address(proxyAdmin));
         }
@@ -445,14 +497,15 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
             // Set proxy type to RESOLVED
             proxyAdmin.setProxyType(l1CrossDomainMessengerProxy, ProxyAdmin.ProxyType.RESOLVED);
             require(uint256(proxyAdmin.proxyType(l1CrossDomainMessengerProxy)) == uint256(ProxyAdmin.ProxyType.RESOLVED));
-            // Set the implementation name to OVM_L1CrossDomainMessenger
-            string memory contractName = "OVM_L1CrossDomainMessenger";
-            proxyAdmin.setImplementationName(l1CrossDomainMessengerProxy, contractName);
-            require(
-                keccak256(bytes(proxyAdmin.implementationName(l1CrossDomainMessengerProxy)))
-                    == keccak256(bytes(contractName))
-            );
         }
+
+        // Set the implementation name to OVM_L1CrossDomainMessenger
+        string memory contractName = "OVM_L1CrossDomainMessenger";
+        proxyAdmin.setImplementationName(l1CrossDomainMessengerProxy, contractName);
+        require(
+            keccak256(bytes(proxyAdmin.implementationName(l1CrossDomainMessengerProxy)))
+                == keccak256(bytes(contractName))
+        );
 
         proxyAdmin.upgradeAndCall({
             _proxy: payable(l1CrossDomainMessengerProxy),
@@ -517,23 +570,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         });
     }
 
-    // Ref: step2, 3, and 4 of `SystemDictator`
+    // Ref: step3 of `SystemDictator`
     // https://github.com/oasysgames/oasys-opstack/blob/cd7c58349542f9f1ce9fd42c9054aeed1325e02c/packages/contracts-bedrock/contracts/deployment/SystemDictator.sol
-    function _pauseLegacyL1CrossDomainMessenger(address addressManager) internal {
-        // Temporarily brick the L1CrossDomainMessenger by setting its implementation address to
-        // address(0) which will cause the ResolvedDelegateProxy to revert. Better than pausing
-        // the L1CrossDomainMessenger via pause() because it can be easily reverted.
-        AddressManager(addressManager).setAddress("OVM_L1CrossDomainMessenger", address(0));
-
-        // Set the DTL shutoff block, which will tell the DTL to stop syncing new deposits from the
-        // CanonicalTransactionChain. We do this by setting an address in the AddressManager
-        // because the DTL already has a reference to the AddressManager and this way we don't also
-        // need to give it a reference to the SystemDictator.
-        AddressManager(addressManager).setAddress(
-            "DTL_SHUTOFF_BLOCK",
-            address(uint160(block.number))
-        );
-
+    function _removeDeprecatedAddresses(address addressManager) internal {
         // Remove all deprecated addresses from the AddressManager
         string[17] memory deprecated = [
             "OVM_CanonicalTransactionChain",
