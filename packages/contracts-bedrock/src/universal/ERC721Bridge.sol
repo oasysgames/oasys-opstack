@@ -4,10 +4,11 @@ pragma solidity 0.8.15;
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import { OasysL1ERC721BridgeLegacySpacer } from "src/oasys/L1/messaging/OasysL1ERC721BridgeLegacySpacer.sol";
 
 /// @title ERC721Bridge
 /// @notice ERC721Bridge is a base contract for the L1 and L2 ERC721 bridges.
-abstract contract ERC721Bridge {
+abstract contract ERC721Bridge is OasysL1ERC721BridgeLegacySpacer {
     /// @notice Messenger contract on this domain. This will be removed in the
     ///         future, use `messenger` instead.
     /// @custom:legacy

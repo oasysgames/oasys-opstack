@@ -23,6 +23,8 @@ import { IBuildL1ERC721Bridge } from "src/oasys/L1/build/interfaces/IBuildL1ERC7
 import { IBuildProtocolVersions } from "src/oasys/L1/build/interfaces/IBuildProtocolVersions.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
 import { IOasysL2OutputOracleVerifier } from "src/oasys/L1/interfaces/IOasysL2OutputOracleVerifier.sol";
+import { PortalSender } from "src/oasys/L1/build/PortalSender.sol";
+import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 
 /// @notice The 2nd version of L1BuildAgent
 ///         Regarding the build step, referred to the build script of Opstack
@@ -71,6 +73,9 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     /// https://betterprogramming.pub/issues-of-returning-arrays-of-dynamic-size-in-solidity-smart-contracts-dd1e54424235
     uint256[] public chainIds;
 
+    /// @notice The flag to pause the L1CrossDomainMessenger
+    bool public messengerPaused;
+
     constructor(
         IBuildProxy _bProxy,
         IBuildOasysL2OutputOracle _bOasysL2OO,
@@ -98,6 +103,50 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         L2OO_VERIFIER = _l2ooVerifier;
     }
 
+
+    /// @notice Pause the legacy L1CrossDomainMessenger
+    ///         This is used when upgrading the existing L2
+    ///         Ref: step2 of `SystemDictator`
+    ///         https://github.com/oasysgames/oasys-opstack/blob/cd7c58349542f9f1ce9fd42c9054aeed1325e02c/packages/contracts-bedrock/contracts/deployment/SystemDictator.sol
+    /// @param addressManager The address manager of the existing L2
+    function pauseLegacyL1CrossDomainMessenger(address addressManager) public {
+        require(!messengerPaused, "L1BuildAgent: already paused");
+
+        messengerPaused = true;
+
+        // Temporarily brick the L1CrossDomainMessenger by setting its implementation address to
+        // address(0) which will cause the ResolvedDelegateProxy to revert. Better than pausing
+        // the L1CrossDomainMessenger via pause() because it can be easily reverted.
+        AddressManager(addressManager).setAddress("OVM_L1CrossDomainMessenger", address(0));
+
+        // Set the DTL shutoff block, which will tell the DTL to stop syncing new deposits from the
+        // CanonicalTransactionChain. We do this by setting an address in the AddressManager
+        // because the DTL already has a reference to the AddressManager and this way we don't also
+        // need to give it a reference to the SystemDictator.
+        AddressManager(addressManager).setAddress(
+            "DTL_SHUTOFF_BLOCK",
+            address(uint160(block.number))
+        );
+    }
+
+    /// @notice Unpause the legacy L1CrossDomainMessenger
+    /// @param addressManager The address manager of the existing L2
+    /// @param oldL1CrossDomainMessenger The address of the old L1CrossDomainMessenger
+    function unpauseLegacyL1CrossDomainMessenger(address addressManager, address oldL1CrossDomainMessenger) public {
+        require(messengerPaused, "L1BuildAgent: not paused");
+
+        messengerPaused = false;
+
+        // Reset the L1CrossDomainMessenger to the old implementation.
+        AddressManager(addressManager).setAddress(
+            "OVM_L1CrossDomainMessenger",
+            oldL1CrossDomainMessenger
+        );
+
+        // Unset the DTL shutoff block which will allow the DTL to sync again.
+        AddressManager(addressManager).setAddress("DTL_SHUTOFF_BLOCK", address(0));
+    }
+
     /// @notice Deploy the L1 contract set to build Verse, This is th main function.
     /// @param _chainId The chainId of Verse
     /// @param _cfg The configuration of the L1 contract set
@@ -106,77 +155,80 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         BuildConfig calldata _cfg
     )
         external
-        returns (address, address[7] memory, address[7] memory, address, address)
+        returns (BuiltAddressList memory, address[7] memory)
     {
+
+        // Only the builder can build the L2
+        // The builder is the person who deposits the required amount
+        address builder = msg.sender;
+
         // Not require to be globally unique, as the pre built L2 needs to be upgraded
         require(_isInternallyUniqueChainId(_chainId), "L1BuildAgent: already deployed");
         if (_requiresDepositCheck(_chainId)) {
             require(
-                L1_BUILD_DEPOSIT.getDepositTotal(msg.sender) >= L1_BUILD_DEPOSIT.requiredAmount(),
+                L1_BUILD_DEPOSIT.getDepositTotal(builder) >= L1_BUILD_DEPOSIT.requiredAmount(),
                 "deposit amount shortage"
             );
         }
 
         // build the deposit.
         // Mark this builder as built.
-        L1_BUILD_DEPOSIT.build(msg.sender);
+        L1_BUILD_DEPOSIT.build(builder);
 
         // register the builder
         // Mark this chainId as built
-        builders[_chainId] = msg.sender;
+        builders[_chainId] = builder;
+
+        // check if the L2 is upgrading the existing L2
+        // If so, the existing address manager is set to the legacyAddressManager
+        // otherwise, legacyAddressManager is empty
+        bool isUpgradingExistingL2 = _cfg.legacyAddressManager != address(0);
 
         // temporarily set the admin to this contract
         // transfer ownership to the final system owner at the end of building
         address admin = address(this);
 
-        // deploy the AddressManager.
-        // TODO: Not required for new L2.
-        address addressManager = address(BUILD_PROXY.deployAddressManager({ owner: admin }));
-
         // deploy proxy contracts for each verse
-        (ProxyAdmin proxyAdmin, address[7] memory proxys) = _deployProxies(admin, addressManager);
+        ProxyAdmin proxyAdmin = _deployProxies(_chainId, admin, _cfg.legacyAddressManager);
 
-        // transfer ownership of the address manager to the ProxyAdmin
-        _transferAddressManagerOwnership(proxyAdmin, addressManager);
+        if (isUpgradingExistingL2) {
+            if (!messengerPaused) {
+                // Pause the legacy L1CrossDomainMessenger
+                pauseLegacyL1CrossDomainMessenger(_cfg.legacyAddressManager);
+            }
+            // Remove deprecated addresses from the AddressManager
+            _removeDeprecatedAddresses(_cfg.legacyAddressManager);
+            // Set the address of the AddressManager.
+            proxyAdmin.setAddressManager(AddressManager(_cfg.legacyAddressManager));
+            require(proxyAdmin.addressManager() == AddressManager(_cfg.legacyAddressManager));
+            // transfer ownership of the address manager to the ProxyAdmin
+            AddressManager(_cfg.legacyAddressManager).transferOwnership(address(proxyAdmin));
+        }
 
         // don't deploy the implementation contracts every time
         // to save gas, reuse the same implementation contract for each proxy
-        address[7] memory impls = _deployImplementations(_cfg, proxys);
+        address[7] memory impls = _deployImplementations(_chainId, _cfg);
 
-        // compute the batch inbox address from chainId
-        // L2 tx bathch is sent to this address
-        address batchInbox = computeInboxAddress(_chainId);
-
-        emit Deployed(_chainId, _cfg.finalSystemOwner, address(proxyAdmin), proxys, impls, batchInbox, addressManager);
-
-        // register built addresses to the builtLists
-        builtLists[_chainId].proxyAdmin = address(proxyAdmin);
-        builtLists[_chainId].systemConfig = proxys[2];
-        builtLists[_chainId].l1StandardBridge = proxys[4];
-        builtLists[_chainId].l1ERC721Bridge = proxys[5];
-        builtLists[_chainId].l1CrossDomainMessenger = proxys[3];
-        builtLists[_chainId].oasysL2OutputOracle = proxys[1];
-        builtLists[_chainId].oasysPortal = proxys[0];
-        builtLists[_chainId].protocolVersions = proxys[6];
-        builtLists[_chainId].batchInbox = batchInbox;
-        builtLists[_chainId].addressManager = addressManager;
+        emit Deployed(_chainId, _cfg.finalSystemOwner, _cfg.legacyAddressManager, builtLists[_chainId], impls);
 
         // append the chainId to the list
         chainIds.push(_chainId);
 
         // initialize each contracts by calling `initialize` functions through proxys
-        _initializeSystemConfig(_cfg, proxyAdmin, impls[2], proxys);
-        _initializeL1StandardBridge(proxyAdmin, impls[4], proxys);
-        _initializeL1ERC721Bridge(proxyAdmin, impls[5], proxys);
-        _initializeL1CrossDomainMessenger(proxyAdmin, impls[3], proxys);
-        _initializeOasysL2OutputOracle(_cfg, proxyAdmin, impls[1], proxys);
-        _initializeOasysPortal(proxyAdmin, impls[0], proxys);
-        _initializeProtocolVersions(_cfg, proxyAdmin, impls[6], proxys);
+        _initializeSystemConfig(_chainId, _cfg, proxyAdmin, impls[2]);
+        // OasysPortal should be initialized before L1StandardBridge,
+        // because L1StandardBridge uses OasysPortal as a recipient of the ETH
+        _initializeOasysPortal(_chainId, proxyAdmin, impls[0]);
+        _initializeL1StandardBridge(_chainId, proxyAdmin, impls[4], isUpgradingExistingL2);
+        _initializeL1ERC721Bridge(_chainId, proxyAdmin, impls[5], isUpgradingExistingL2);
+        _initializeL1CrossDomainMessenger(_chainId, proxyAdmin, impls[3], isUpgradingExistingL2);
+        _initializeOasysL2OutputOracle(_chainId, _cfg, proxyAdmin, impls[1]);
+        _initializeProtocolVersions(_chainId, _cfg, proxyAdmin, impls[6]);
 
         // transfer ownership of the proxy admin to the final system owner
         _transferProxyAdminOwnership(_cfg, proxyAdmin);
 
-        return (address(proxyAdmin), proxys, impls, batchInbox, addressManager);
+        return (builtLists[_chainId], impls);
     }
 
     /// @notice Compute inbox address from chainId
@@ -217,25 +269,28 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     }
 
     function _deployProxies(
+        uint256 _chainId,
         address admin,
         address addressManager
     )
         internal
-        returns (ProxyAdmin proxyAdmin, address[7] memory proxys)
+        returns (ProxyAdmin proxyAdmin)
     {
         proxyAdmin = BUILD_PROXY.deployProxyAdmin({ owner: admin });
-        proxys[0] = _deployProxy(address(proxyAdmin)); // OasysPortalProxy
-        proxys[1] = _deployProxy(address(proxyAdmin)); // OasysL2OutputOracleProxy
-        proxys[2] = _deployProxy(address(proxyAdmin)); // SystemConfigProxy
-        proxys[3] = _deployL1CrossDomainMessengerProxy(addressManager); // L1CrossDomainMessengerProxy
-        proxys[4] = _deployL1StandardBridgeProxy(address(proxyAdmin)); // L1StandardBridgeProxy
-        proxys[5] = _deployProxy(address(proxyAdmin)); // L1ERC721BridgeProxy
-        proxys[6] = _deployProxy(address(proxyAdmin)); // ProtocolVersionsProxy
 
-        // Set the address of the AddressManager.
-        // TODO: Not required for new L2.
-        proxyAdmin.setAddressManager(AddressManager(addressManager));
-        require(proxyAdmin.addressManager() == AddressManager(addressManager));
+        // register built addresses to the builtLists
+        builtLists[_chainId].proxyAdmin = address(proxyAdmin);
+        builtLists[_chainId].oasysPortal = _deployProxy(address(proxyAdmin));
+        builtLists[_chainId].oasysL2OutputOracle = _deployProxy(address(proxyAdmin));
+        builtLists[_chainId].systemConfig = _deployProxy(address(proxyAdmin));
+        builtLists[_chainId].l1CrossDomainMessenger = _deployL1CrossDomainMessengerProxy(address(proxyAdmin), addressManager);
+        builtLists[_chainId].l1StandardBridge = _deployL1StandardBridgeProxy(address(proxyAdmin), addressManager);
+        builtLists[_chainId].l1ERC721Bridge = _deployL1ERC721BridgeProxy(address(proxyAdmin), addressManager);
+        builtLists[_chainId].protocolVersions = _deployProxy(address(proxyAdmin));
+
+        // compute the batch inbox address from chainId
+        // L2 tx bathch is sent to this address
+        builtLists[_chainId].batchInbox = computeInboxAddress(_chainId);
     }
 
     /// @notice Deploy the Proxy
@@ -244,42 +299,59 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     }
 
     /// @notice Deploy the L1CrossDomainMessengerProxy using a ResolvedDelegateProxy
-    function _deployL1CrossDomainMessengerProxy(address _addressManager) internal returns (address addr) {
-        AddressManager addressManager = AddressManager(_addressManager);
-
-        string memory contractName = "OVM_L1CrossDomainMessenger";
-        // TODO: Not required for new L2.
-        ResolvedDelegateProxy proxy =
-            BUILD_PROXY.deployResolvedProxy({ addressManager: _addressManager, implementationName: contractName });
-
-        address contractAddr = addressManager.getAddress(contractName);
-        if (contractAddr != address(proxy)) {
-            addressManager.setAddress(contractName, address(proxy));
+    function _deployL1CrossDomainMessengerProxy(address proxyAdmin, address addressManager) internal returns (address addr) {
+        if (addressManager != address(0)) {
+            // upgrading existing L2
+            // Don't deply proxy, as the existing L2 already has the proxy(RelolvedDelegateProxy)
+            string memory contractName = "Proxy__OVM_L1CrossDomainMessenger";
+            addr = AddressManager(addressManager).getAddress(contractName);
+            require(addr != address(0), "L1BuildAgent: failed to find L1CrossDomainMessengerProxy from AddressManager");
+        } else {
+            addr = _deployProxy(address(proxyAdmin));
         }
-
-        require(addressManager.getAddress(contractName) == address(proxy));
-
-        addr = address(proxy);
     }
 
-    function _deployL1StandardBridgeProxy(address admin) internal returns (address addr) {
-        // TODO: Not required for new L2.
-        addr = address(BUILD_PROXY.deployChugProxy({ owner: admin }));
+    function _deployL1StandardBridgeProxy(address proxyAdmin, address addressManager) internal returns (address addr) {
+        if (addressManager != address(0)) {
+            // upgrading existing L2
+            // Don't deply proxy, as the existing L2 already has the proxy(RelolvedDelegateProxy)
+            string memory contractName = "Proxy__OVM_L1StandardBridge";
+            addr = AddressManager(addressManager).getAddress(contractName);
+            require(addr != address(0), "L1BuildAgent: failed to find L1StandardBridgeProxy from AddressManager");
+            // Trasfer ownership to ProxyAdmin
+            L1ChugSplashProxy(payable(addr)).setOwner(address(proxyAdmin));
+        } else {
+            addr = _deployProxy(address(proxyAdmin));
+        }
+    }
+
+    function _deployL1ERC721BridgeProxy(address proxyAdmin, address addressManager) internal returns (address addr) {
+        if (addressManager != address(0)) {
+            // upgrading existing L2
+            // Don't deply proxy, as the existing L2 already has the proxy(RelolvedDelegateProxy)
+            string memory contractName = "Proxy__OVM_L1ERC721Bridge";
+            addr = AddressManager(addressManager).getAddress(contractName);
+            require(addr != address(0), "L1BuildAgent: failed to find L1ERC721BridgeProxy from AddressManager");
+            // Trasfer ownership to ProxyAdmin
+            L1ChugSplashProxy(payable(addr)).setOwner(address(proxyAdmin));
+        } else {
+            addr = _deployProxy(address(proxyAdmin));
+        }
     }
 
     /// @notice Deploy all of the implementations
     function _deployImplementations(
-        BuildConfig calldata _cfg,
-        address[7] memory proxys
+        uint256 _chainId,
+        BuildConfig calldata _cfg
     )
         internal
         returns (address[7] memory impls)
     {
         impls[0] = _deployImplementation(
             BUILD_OASYS_PORTAL.deployBytecode({
-                _l2Oracle: proxys[1], // OasysL2OutputOracleProxy
+                _l2Oracle: builtLists[_chainId].oasysL2OutputOracle,
                 _guardian: _cfg.finalSystemOwner,
-                _systemConfig: proxys[2] // SystemConfigProxy
+                _systemConfig: builtLists[_chainId].systemConfig
              })
         );
 
@@ -302,19 +374,19 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
         impls[3] = _deployImplementation(
             BUILD_L1CROSS_DOMAIN_MESSENGER.deployBytecode({
-                _portal: payable(proxys[0]) // OasysPortalProxy
+                _portal: payable(builtLists[_chainId].oasysPortal) // OasysPortalProxy
              })
         );
 
         impls[4] = _deployImplementation(
             BUILD_L1_STANDARD_BRIDGE.deployBytecode({
-                _messenger: payable(proxys[3]) // L1CrossDomainMessengerProxy
+                _messenger: payable(builtLists[_chainId].l1CrossDomainMessenger) // L1CrossDomainMessengerProxy
              })
         );
 
         impls[5] = _deployImplementation(
             BUILD_L1_ERC721_BRIDGE.deployBytecode({
-                _messenger: proxys[3], // L1CrossDomainMessengerProxy
+                _messenger: builtLists[_chainId].l1CrossDomainMessenger, // L1CrossDomainMessengerProxy
                 _otherBridge: L2PredeployAddresses.L2_ERC721_BRIDGE
             })
         );
@@ -332,14 +404,14 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
     /// @notice Initialize the SystemConfig
     function _initializeSystemConfig(
+        uint256 _chainId,
         BuildConfig calldata _cfg,
         ProxyAdmin proxyAdmin,
-        address impl,
-        address[7] memory proxys
+        address impl
     )
         internal
     {
-        address systemConfigProxy = proxys[2];
+        address systemConfigProxy = builtLists[_chainId].systemConfig;
 
         proxyAdmin.upgradeAndCall({
             _proxy: payable(systemConfigProxy),
@@ -366,54 +438,75 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     }
 
     /// @notice Initialize the L1StandardBridge
-    function _initializeL1StandardBridge(ProxyAdmin proxyAdmin, address impl, address[7] memory proxys) internal {
-        address l1StandardBridgeProxy = proxys[4];
+    function _initializeL1StandardBridge(
+        uint256 _chainId,
+        ProxyAdmin proxyAdmin,
+        address impl,
+        bool isUpgradingExistingL2
+    ) internal {
+        address l1StandardBridgeProxy = builtLists[_chainId].l1StandardBridge;
 
-        uint256 proxyType = uint256(proxyAdmin.proxyType(l1StandardBridgeProxy));
-        if (proxyType != uint256(ProxyAdmin.ProxyType.CHUGSPLASH)) {
+        if (isUpgradingExistingL2) {
+            // The proxy of Legacy L2 is L1ChugSplashProxy, so need to set type
             proxyAdmin.setProxyType(l1StandardBridgeProxy, ProxyAdmin.ProxyType.CHUGSPLASH);
-        }
-        require(uint256(proxyAdmin.proxyType(l1StandardBridgeProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
+            require(uint256(proxyAdmin.proxyType(l1StandardBridgeProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
 
-        // TODO: Built L2 uses L1ChugSplashProxy and requires special handling.
+            // Transfer ETH from the L1StandardBridge to the OptimismPortal.
+            PortalSender portalSender = new PortalSender(OptimismPortal(payable(builtLists[_chainId].oasysPortal)));
+            proxyAdmin.upgradeAndCall(
+                payable(l1StandardBridgeProxy),
+                address(portalSender),
+                abi.encodeCall(PortalSender.donate, ())
+            );
+        }
+
         proxyAdmin.upgrade({ _proxy: payable(l1StandardBridgeProxy), _implementation: impl });
     }
 
     /// @notice Initialize the L1ERC721Bridge
-    function _initializeL1ERC721Bridge(ProxyAdmin proxyAdmin, address impl, address[7] memory proxys) internal {
-        address l1ERC721BridgeProxy = proxys[5];
+    function _initializeL1ERC721Bridge(
+        uint256 _chainId,
+        ProxyAdmin proxyAdmin,
+        address impl,
+        bool isUpgradingExistingL2
+    ) internal {
+        address l1ERC721BridgeProxy = builtLists[_chainId].l1ERC721Bridge;
 
-        // TODO: Built L2 uses L1ChugSplashProxy and requires special handling.
+        if (isUpgradingExistingL2) {
+            // The proxy of Legacy L2 is L1ChugSplashProxy, so need to set type
+            proxyAdmin.setProxyType(l1ERC721BridgeProxy, ProxyAdmin.ProxyType.CHUGSPLASH);
+            require(uint256(proxyAdmin.proxyType(l1ERC721BridgeProxy)) == uint256(ProxyAdmin.ProxyType.CHUGSPLASH));
+        }
+
         proxyAdmin.upgrade({ _proxy: payable(l1ERC721BridgeProxy), _implementation: impl });
     }
 
     /// @notice Initialize the L1CrossDomainMessenger
     function _initializeL1CrossDomainMessenger(
+        uint256 _chainId,
         ProxyAdmin proxyAdmin,
         address impl,
-        address[7] memory proxys
+        bool isUpgradingExistingL2
     )
         internal
     {
-        address l1CrossDomainMessengerProxy = proxys[3];
+        address l1CrossDomainMessengerProxy = builtLists[_chainId].l1CrossDomainMessenger;
 
-        uint256 proxyType = uint256(proxyAdmin.proxyType(l1CrossDomainMessengerProxy));
-        if (proxyType != uint256(ProxyAdmin.ProxyType.RESOLVED)) {
+        if (isUpgradingExistingL2) {
+            // The proxy of Legacy L2 is ResolvedDelegateProxy, so need to set type and implementation name
+            // Set proxy type to RESOLVED
             proxyAdmin.setProxyType(l1CrossDomainMessengerProxy, ProxyAdmin.ProxyType.RESOLVED);
+            require(uint256(proxyAdmin.proxyType(l1CrossDomainMessengerProxy)) == uint256(ProxyAdmin.ProxyType.RESOLVED));
         }
-        require(uint256(proxyAdmin.proxyType(l1CrossDomainMessengerProxy)) == uint256(ProxyAdmin.ProxyType.RESOLVED));
 
+        // Set the implementation name to OVM_L1CrossDomainMessenger
         string memory contractName = "OVM_L1CrossDomainMessenger";
-        string memory implName = proxyAdmin.implementationName(impl);
-        if (keccak256(bytes(contractName)) != keccak256(bytes(implName))) {
-            proxyAdmin.setImplementationName(l1CrossDomainMessengerProxy, contractName);
-        }
+        proxyAdmin.setImplementationName(l1CrossDomainMessengerProxy, contractName);
         require(
             keccak256(bytes(proxyAdmin.implementationName(l1CrossDomainMessengerProxy)))
                 == keccak256(bytes(contractName))
         );
 
-        // TODO: Built L2 uses OVM_L1CrossDomainMessengerProxy and requires special handling.
         proxyAdmin.upgradeAndCall({
             _proxy: payable(l1CrossDomainMessengerProxy),
             _implementation: impl,
@@ -423,14 +516,14 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
 
     /// @notice Initialize the OasysL2OutputOracle
     function _initializeOasysL2OutputOracle(
+        uint256 _chainId,
         BuildConfig calldata _cfg,
         ProxyAdmin proxyAdmin,
-        address impl,
-        address[7] memory proxys
+        address impl
     )
         internal
     {
-        address l2OutputOracleProxy = proxys[1];
+        address l2OutputOracleProxy = builtLists[_chainId].oasysL2OutputOracle;
 
         proxyAdmin.upgradeAndCall({
             _proxy: payable(l2OutputOracleProxy),
@@ -443,8 +536,8 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     }
 
     /// @notice Initialize the OasysPortal
-    function _initializeOasysPortal(ProxyAdmin proxyAdmin, address impl, address[7] memory proxys) internal {
-        address oasysPortalProxy = proxys[0];
+    function _initializeOasysPortal(uint256 _chainId, ProxyAdmin proxyAdmin, address impl) internal {
+        address oasysPortalProxy = builtLists[_chainId].oasysPortal;
 
         proxyAdmin.upgradeAndCall({
             _proxy: payable(oasysPortalProxy),
@@ -454,14 +547,14 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     }
 
     function _initializeProtocolVersions(
+        uint256 _chainId,
         BuildConfig calldata _cfg,
         ProxyAdmin proxyAdmin,
-        address impl,
-        address[7] memory proxys
+        address impl
     )
         internal
     {
-        address protocolVersionsProxy = proxys[6];
+        address protocolVersionsProxy = builtLists[_chainId].protocolVersions;
 
         uint256 requiredProtocolVersion = uint256(0x0);
         uint256 recommendedProtocolVersion = uint256(0x0);
@@ -477,20 +570,40 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         });
     }
 
+    // Ref: step3 of `SystemDictator`
+    // https://github.com/oasysgames/oasys-opstack/blob/cd7c58349542f9f1ce9fd42c9054aeed1325e02c/packages/contracts-bedrock/contracts/deployment/SystemDictator.sol
+    function _removeDeprecatedAddresses(address addressManager) internal {
+        // Remove all deprecated addresses from the AddressManager
+        string[17] memory deprecated = [
+            "OVM_CanonicalTransactionChain",
+            "OVM_L2CrossDomainMessenger",
+            "OVM_DecompressionPrecompileAddress",
+            "OVM_Sequencer",
+            "OVM_Proposer",
+            "OVM_ChainStorageContainer-CTC-batches",
+            "OVM_ChainStorageContainer-CTC-queue",
+            "OVM_CanonicalTransactionChain",
+            "OVM_StateCommitmentChain",
+            "OVM_BondManager",
+            "OVM_ExecutionManager",
+            "OVM_FraudVerifier",
+            "OVM_StateManagerFactory",
+            "OVM_StateTransitionerFactory",
+            "OVM_SafetyChecker",
+            "OVM_L1MultiMessageRelayer",
+            "BondManager"
+        ];
+        for (uint256 i = 0; i < deprecated.length; i++) {
+            AddressManager(addressManager).setAddress(deprecated[i], address(0));
+        }
+    }
+
     /// @notice Transfer ownership of the ProxyAdmin contract to the final system owner
     function _transferProxyAdminOwnership(BuildConfig calldata _cfg, ProxyAdmin proxyAdmin) internal {
         address owner = proxyAdmin.owner();
         address finalSystemOwner = _cfg.finalSystemOwner;
         if (owner != finalSystemOwner) {
             proxyAdmin.transferOwnership(finalSystemOwner);
-        }
-    }
-
-    /// @notice Transfer ownership of the address manager to the ProxyAdmin
-    function _transferAddressManagerOwnership(ProxyAdmin proxyAdmin, address _addressManager) internal {
-        AddressManager addressManager = AddressManager(_addressManager);
-        if (addressManager.owner() != address(proxyAdmin)) {
-            addressManager.transferOwnership(address(proxyAdmin));
         }
     }
 }

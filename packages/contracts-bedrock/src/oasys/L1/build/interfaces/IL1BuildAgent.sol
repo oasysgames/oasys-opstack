@@ -3,6 +3,11 @@ pragma solidity 0.8.15;
 
 interface IL1BuildAgent {
     struct BuildConfig {
+        // The address of `Lib_AddressManager`.
+        // Value:
+        //  - for new chain      : address(0)
+        //  - for existing chain : pre-deployed address
+        address legacyAddressManager;
         // The owner of L1 contract set. Any L1 contract that is ownable has this account set as its owner
         // Value: depending on each verse
         address finalSystemOwner;
@@ -58,24 +63,21 @@ interface IL1BuildAgent {
         address oasysPortal;
         address protocolVersions;
         address batchInbox;
-        address addressManager;
     }
 
     /// @notice Event emitted when the L1 contract set is deployed
     event Deployed(
         uint256 indexed chainId,
-        address owner,
-        address proxyAdmin,
-        address[7] proxys,
-        address[7] impls,
-        address batchInbox,
-        address addressManager
+        address finalSystemOwner,
+        address legacyAddressManager,
+        BuiltAddressList results,
+        address[7] impls
     );
 
     function builtLists(uint256 chainId)
         external
         view
-        returns (address, address, address, address, address, address, address, address, address, address);
+        returns (address, address, address, address, address, address, address, address, address);
 
     function chainIds(uint256 index) external view returns (uint256 chainId);
 
@@ -88,11 +90,5 @@ interface IL1BuildAgent {
         BuildConfig calldata cfg
     )
         external
-        returns (
-            address proxyAdmin,
-            address[7] memory proxys,
-            address[7] memory impls,
-            address batchInbox,
-            address addressManager
-        );
+        returns (BuiltAddressList memory, address[7] memory);
 }

@@ -51,6 +51,26 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
         super.initialize(_startingBlockNumber, _startingTimestamp);
     }
 
+    /// @notice Update the starting block number and timestamp.
+    ///         Anyone can call, until the first output is recorded or deleted all the outputs.
+    ///         This function for the purpose of attempting the L2 upgrade again,
+    ///         after the L2 Upgrade fails and rollback operations are conducted.
+    /// @param _startingBlockNumber Block number for the first recoded L2 block.
+    /// @param _startingTimestamp   Timestamp for the first recoded L2 block.
+    function updateStartingBlock(uint256 _startingBlockNumber, uint256 _startingTimestamp) public {
+        require(
+            _startingTimestamp <= block.timestamp,
+            "L2OutputOracle: starting L2 timestamp must be less than current time"
+        );
+        require(
+            l2Outputs.length == 0,
+            "L2OutputOracle: cannot update starting block after outputs have been recorded"
+        );
+
+        startingTimestamp = _startingTimestamp;
+        startingBlockNumber = _startingBlockNumber;
+    }
+
     /// @notice Getter function for the address of the OasysL2OutputOracleVerifier on this chain.
     /// @notice Address of the OasysL2OutputOracleVerifier on this chain.
     function l2OracleVerifier() public view returns (IOasysL2OutputOracleVerifier) {
