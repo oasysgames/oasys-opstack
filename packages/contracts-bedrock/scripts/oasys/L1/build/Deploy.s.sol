@@ -10,7 +10,7 @@ import { L1BuildDeposit } from "src/oasys/L1/build/L1BuildDeposit.sol";
 import { OasysL2OutputOracleVerifier } from "src/oasys/L1/rollup/OasysL2OutputOracleVerifier.sol";
 import { BuildProxy } from "src/oasys/L1/build/BuildProxy.sol";
 import { BuildL1CrossDomainMessenger } from "src/oasys/L1/build/BuildL1CrossDomainMessenger.sol";
-import { BuildL1ERC721Bridge } from "src/oasys/L1/build/BuildL1ERC721Bridge.sol";
+import { BuildOasysL1ERC721Bridge } from "src/oasys/L1/build/BuildOasysL1ERC721Bridge.sol";
 import { BuildL1StandardBridge } from "src/oasys/L1/build/BuildL1StandardBridge.sol";
 import { BuildOasysL2OutputOracle } from "src/oasys/L1/build/BuildOasysL2OutputOracle.sol";
 import { BuildOasysPortal } from "src/oasys/L1/build/BuildOasysPortal.sol";
@@ -41,12 +41,12 @@ contract Deploy is Script {
 
     struct BuildContracts {
         address Proxy;
-        address OutputOracle;
+        address OasysL2OutputOracle;
         address OasysPortal;
         address L1Messenger;
         address SystemConfig;
         address L1StandardBridg;
-        address L1ERC721Bridge;
+        address OasysL1ERC721Bridge;
         address ProtocolVersions;
     }
 
@@ -84,12 +84,12 @@ contract Deploy is Script {
         _initL2ooVerifier(pL2ooVerifier);
         _initL1BuildAgent(
             builts.Proxy,
-            builts.OutputOracle,
+            builts.OasysL2OutputOracle,
             builts.OasysPortal,
             builts.L1Messenger,
             builts.SystemConfig,
             builts.L1StandardBridg,
-            builts.L1ERC721Bridge,
+            builts.OasysL1ERC721Bridge,
             builts.ProtocolVersions,
             pAgent,
             pDeposit,
@@ -208,12 +208,12 @@ contract Deploy is Script {
         return BuildContracts({
             ProtocolVersions: _deploy("BuildProtocolVersions", type(BuildProtocolVersions).creationCode),
             Proxy: _deploy("BuildProxy", type(BuildProxy).creationCode),
-            OutputOracle: _deploy("BuildL2OutputOracle", type(BuildOasysL2OutputOracle).creationCode),
+            OasysL2OutputOracle: _deploy("BuildOasysL2OutputOracle", type(BuildOasysL2OutputOracle).creationCode),
             OasysPortal: _deploy("BuildOasysPortal", type(BuildOasysPortal).creationCode),
             L1Messenger: _deploy("BuildL1CrossDomainMessenger", type(BuildL1CrossDomainMessenger).creationCode),
             SystemConfig: _deploy("BuildSystemConfig", type(BuildSystemConfig).creationCode),
             L1StandardBridg: _deploy("BuildL1StandardBridge", type(BuildL1StandardBridge).creationCode),
-            L1ERC721Bridge: _deploy("BuildL1ERC721Bridge", type(BuildL1ERC721Bridge).creationCode)
+            OasysL1ERC721Bridge: _deploy("BuildOasysL1ERC721Bridge", type(BuildOasysL1ERC721Bridge).creationCode)
         });
     }
 
@@ -230,12 +230,12 @@ contract Deploy is Script {
         json.serialize("L1BuildDeposit", pDeposit);
         json.serialize("OasysL2OutputOracleVerifier", pL2ooVerifier);
         json.serialize("BuildProxy", builts.Proxy);
-        json.serialize("BuildL2OutputOracle", builts.OutputOracle);
+        json.serialize("BuildOasysL2OutputOracle", builts.OasysL2OutputOracle);
         json.serialize("BuildOasysPortal", builts.OasysPortal);
         json.serialize("BuildL1CrossDomainMessenger", builts.L1Messenger);
         json.serialize("BuildSystemConfig", builts.SystemConfig);
         json.serialize("BuildL1StandardBridge", builts.L1StandardBridg);
-        json.serialize("BuildL1ERC721Bridge", builts.L1ERC721Bridge);
+        json.serialize("BuildOasysL1ERC721Bridge", builts.OasysL1ERC721Bridge);
         json = json.serialize("BuildProtocolVersions", builts.ProtocolVersions);
 
         json.write(cfg.deployLatestOutPath);

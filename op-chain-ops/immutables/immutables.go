@@ -38,11 +38,11 @@ func (i ImmutableConfig) Check() error {
 	if _, ok := i["L2StandardBridge"]["otherBridge"]; !ok {
 		return errors.New("L2StandardBridge otherBridge not set")
 	}
-	if _, ok := i["L2ERC721Bridge"]["messenger"]; !ok {
-		return errors.New("L2ERC721Bridge messenger not set")
+	if _, ok := i["OasysL2ERC721Bridge"]["messenger"]; !ok {
+		return errors.New("OasysL2ERC721Bridge messenger not set")
 	}
-	if _, ok := i["L2ERC721Bridge"]["otherBridge"]; !ok {
-		return errors.New("L2ERC721Bridge otherBridge not set")
+	if _, ok := i["OasysL2ERC721Bridge"]["otherBridge"]; !ok {
+		return errors.New("OasysL2ERC721Bridge otherBridge not set")
 	}
 	if _, ok := i["OptimismMintableERC721Factory"]["bridge"]; !ok {
 		return errors.New("OptimismMintableERC20Factory bridge not set")
@@ -132,10 +132,10 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 			Name: "L1BlockNumber",
 		},
 		{
-			Name: "L2ERC721Bridge",
+			Name: "OasysL2ERC721Bridge",
 			Args: []interface{}{
-				immutable["L2ERC721Bridge"]["messenger"],
-				immutable["L2ERC721Bridge"]["otherBridge"],
+				immutable["OasysL2ERC721Bridge"]["messenger"],
+				immutable["OasysL2ERC721Bridge"]["otherBridge"],
 			},
 		},
 		{
@@ -240,7 +240,7 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		_, tx, _, err = bindings.DeployLegacyMessagePasser(opts, backend)
 	case "L1BlockNumber":
 		_, tx, _, err = bindings.DeployL1BlockNumber(opts, backend)
-	case "L2ERC721Bridge":
+	case "OasysL2ERC721Bridge":
 		messenger, ok := deployment.Args[0].(common.Address)
 		if !ok {
 			return nil, fmt.Errorf("invalid type for messenger")
@@ -249,7 +249,7 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		if !ok {
 			return nil, fmt.Errorf("invalid type for otherBridge")
 		}
-		_, tx, _, err = bindings.DeployL2ERC721Bridge(opts, backend, messenger, otherBridge)
+		_, tx, _, err = bindings.DeployOasysL2ERC721Bridge(opts, backend, messenger, otherBridge)
 	case "OptimismMintableERC721Factory":
 		bridge, ok := deployment.Args[0].(common.Address)
 		if !ok {

@@ -689,7 +689,7 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	immutable["L2CrossDomainMessenger"] = immutables.ImmutableValues{
 		"otherMessenger": config.L1CrossDomainMessengerProxy,
 	}
-	immutable["L2ERC721Bridge"] = immutables.ImmutableValues{
+	immutable["OasysL2ERC721Bridge"] = immutables.ImmutableValues{
 		"messenger":   predeploys.L2CrossDomainMessengerAddr,
 		"otherBridge": config.L1ERC721BridgeProxy,
 	}

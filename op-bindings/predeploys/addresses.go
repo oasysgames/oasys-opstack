@@ -78,7 +78,7 @@ func init() {
 		},
 	}
 	Predeploys["LegacyMessagePasser"] = &Predeploy{Address: LegacyMessagePasserAddr}
-	Predeploys["L2ERC721Bridge"] = &Predeploy{Address: L2ERC721BridgeAddr}
+	Predeploys["OasysL2ERC721Bridge"] = &Predeploy{Address: OasysL2ERC721BridgeAddr}
 	Predeploys["OptimismMintableERC721Factory"] = &Predeploy{Address: OptimismMintableERC721FactoryAddr}
 	Predeploys["ProxyAdmin"] = &Predeploy{Address: ProxyAdminAddr}
 	Predeploys["BaseFeeVault"] = &Predeploy{Address: BaseFeeVaultAddr}

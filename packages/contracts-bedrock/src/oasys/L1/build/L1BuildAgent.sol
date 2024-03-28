@@ -19,7 +19,7 @@ import { IBuildOasysPortal } from "src/oasys/L1/build/interfaces/IBuildOasysPort
 import { IBuildL1CrossDomainMessenger } from "src/oasys/L1/build/interfaces/IBuildL1CrossDomainMessenger.sol";
 import { IBuildSystemConfig } from "src/oasys/L1/build/interfaces/IBuildSystemConfig.sol";
 import { IBuildL1StandardBridge } from "src/oasys/L1/build/interfaces/IBuildL1StandardBridge.sol";
-import { IBuildL1ERC721Bridge } from "src/oasys/L1/build/interfaces/IBuildL1ERC721Bridge.sol";
+import { IBuildOasysL1ERC721Bridge } from "src/oasys/L1/build/interfaces/IBuildOasysL1ERC721Bridge.sol";
 import { IBuildProtocolVersions } from "src/oasys/L1/build/interfaces/IBuildProtocolVersions.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
 import { IOasysL2OutputOracleVerifier } from "src/oasys/L1/interfaces/IOasysL2OutputOracleVerifier.sol";
@@ -37,7 +37,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
     IBuildL1CrossDomainMessenger public immutable BUILD_L1CROSS_DOMAIN_MESSENGER;
     IBuildSystemConfig public immutable BUILD_SYSTEM_CONFIG;
     IBuildL1StandardBridge public immutable BUILD_L1_STANDARD_BRIDGE;
-    IBuildL1ERC721Bridge public immutable BUILD_L1_ERC721_BRIDGE;
+    IBuildOasysL1ERC721Bridge public immutable BUILD_OASYS_L1_ERC721_BRIDGE;
     IBuildProtocolVersions public immutable BUILD_PROTOCOL_VERSIONS;
     IOasysL2OutputOracleVerifier public immutable L2OO_VERIFIER;
 
@@ -78,7 +78,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         IBuildL1CrossDomainMessenger _bL1CrossDomainMessenger,
         IBuildSystemConfig _bSystemConfig,
         IBuildL1StandardBridge _bL1StandardBridg,
-        IBuildL1ERC721Bridge _bL1ERC721Bridge,
+        IBuildOasysL1ERC721Bridge _bOasysL1ERC721Bridge,
         IBuildProtocolVersions _bProtocolVersions,
         IL1BuildDeposit _l1BuildDeposit,
         ILegacyL1BuildAgent _legacyL1BuildAgent,
@@ -90,7 +90,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         BUILD_L1CROSS_DOMAIN_MESSENGER = _bL1CrossDomainMessenger;
         BUILD_SYSTEM_CONFIG = _bSystemConfig;
         BUILD_L1_STANDARD_BRIDGE = _bL1StandardBridg;
-        BUILD_L1_ERC721_BRIDGE = _bL1ERC721Bridge;
+        BUILD_OASYS_L1_ERC721_BRIDGE = _bOasysL1ERC721Bridge;
         BUILD_PROTOCOL_VERSIONS = _bProtocolVersions;
 
         L1_BUILD_DEPOSIT = _l1BuildDeposit;
@@ -313,7 +313,7 @@ contract L1BuildAgent is IL1BuildAgent, ISemver {
         );
 
         impls[5] = _deployImplementation(
-            BUILD_L1_ERC721_BRIDGE.deployBytecode({
+            BUILD_OASYS_L1_ERC721_BRIDGE.deployBytecode({
                 _messenger: proxys[3], // L1CrossDomainMessengerProxy
                 _otherBridge: L2PredeployAddresses.L2_ERC721_BRIDGE
             })
