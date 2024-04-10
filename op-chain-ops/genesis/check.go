@@ -243,7 +243,7 @@ func PostCheckUntouchables(udb state.Database, currDB *state.StateDB, prevRoot c
 func PostCheckPredeploys(prevDB, currDB *state.StateDB) error {
 	for i := uint64(0); i <= 2048; i++ {
 		// Compute the predeploy address
-		bigAddr := new(big.Int).Or(bigL2PredeployNamespace, new(big.Int).SetUint64(i))
+		bigAddr := new(big.Int).Or(BigL2PredeployNamespace, new(big.Int).SetUint64(i))
 		addr := common.BigToAddress(bigAddr)
 		// Get the code for the predeploy
 		code := currDB.GetCode(addr)
@@ -279,7 +279,9 @@ func PostCheckPredeploys(prevDB, currDB *state.StateDB) error {
 
 	// For each predeploy, check that we've set the implementation correctly when
 	// necessary and that there's code at the implementation.
-	for _, proxyAddr := range predeploys.Predeploys {
+	for _, deploy := range predeploys.Predeploys {
+		proxyAddr := &deploy.Address
+
 		if UntouchablePredeploys[*proxyAddr] {
 			log.Trace("skipping untouchable predeploy", "address", proxyAddr)
 			continue
@@ -321,7 +323,9 @@ func PostCheckPredeploys(prevDB, currDB *state.StateDB) error {
 // PostCheckPredeployStorage will ensure that the predeploys had their storage
 // wiped correctly.
 func PostCheckPredeployStorage(db *state.StateDB, finalSystemOwner common.Address, proxyAdminOwner common.Address) error {
-	for name, addr := range predeploys.Predeploys {
+	for name, deploy := range predeploys.Predeploys {
+		addr := &deploy.Address
+
 		if addr == nil {
 			return fmt.Errorf("nil address in predeploys mapping for %s", name)
 		}
@@ -671,7 +675,7 @@ func eip1967Slots(address common.Address) StorageCheckMap {
 		panic(err)
 	}
 	return StorageCheckMap{
-		AdminSlot:          predeploys.ProxyAdminAddr.Hash(),
-		ImplementationSlot: codeAddr.Hash(),
+		AdminSlot:          common.BytesToHash(predeploys.ProxyAdminAddr[:]),
+		ImplementationSlot: common.BytesToHash(codeAddr[:]),
 	}
 }

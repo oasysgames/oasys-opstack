@@ -56,21 +56,15 @@ var (
 // can be set in state and the ProxyAdmin can be set as the admin of the
 // Proxy.
 func SetL2Proxies(db vm.StateDB) error {
-	return setProxies(db, predeploys.ProxyAdminAddr, bigL2PredeployNamespace, 2048)
-}
-
-// SetL1Proxies will set each of the proxies in the state. It requires
-// a Proxy and ProxyAdmin deployment present so that the Proxy bytecode
-// can be set in state and the ProxyAdmin can be set as the admin of the
-// Proxy.
-func SetL1Proxies(db vm.StateDB, proxyAdminAddr common.Address) error {
-	return setProxies(db, proxyAdminAddr, bigL1PredeployNamespace, 2048)
+	return setProxies(db, predeploys.ProxyAdminAddr, BigL2PredeployNamespace, 2048)
 }
 
 // WipePredeployStorage will wipe the storage of all L2 predeploys expect
 // for predeploys that must not have their storage altered.
 func WipePredeployStorage(db vm.StateDB) error {
-	for name, addr := range predeploys.Predeploys {
+	for name, deploy := range predeploys.Predeploys {
+		addr := &deploy.Address
+
 		if addr == nil {
 			return fmt.Errorf("nil address in predeploys mapping for %s", name)
 		}
@@ -111,7 +105,9 @@ func SetImplementations(db vm.StateDB, storage state.StorageConfig, immutable im
 		return err
 	}
 
-	for name, address := range predeploys.Predeploys {
+	for name, deploy := range predeploys.Predeploys {
+		address := &deploy.Address
+
 		if UntouchablePredeploys[*address] {
 			continue
 		}
@@ -129,7 +125,7 @@ func SetImplementations(db vm.StateDB, storage state.StorageConfig, immutable im
 			db.CreateAccount(codeAddr)
 		}
 
-		db.SetState(*address, ImplementationSlot, codeAddr.Hash())
+		db.SetState(*address, ImplementationSlot, common.BytesToHash(codeAddr[:]))
 
 		if err := setupPredeploy(db, deployResults, storage, name, *address, codeAddr); err != nil {
 			return err
@@ -149,7 +145,9 @@ func SetDevOnlyL2Implementations(db vm.StateDB, storage state.StorageConfig, imm
 		return err
 	}
 
-	for name, address := range predeploys.Predeploys {
+	for name, deploy := range predeploys.Predeploys {
+		address := &deploy.Address
+
 		if !UntouchablePredeploys[*address] {
 			continue
 		}

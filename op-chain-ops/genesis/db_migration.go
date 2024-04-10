@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
 )
 
 var (
@@ -82,7 +83,7 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 		// Set up the backing store.
 		underlyingDB := state.NewDatabaseWithConfig(ldb, &trie.Config{
 			Preimages: true,
-			Cache:     1024,
+			HashDB:    &hashdb.Config{CleanCacheSize: 1024},
 		})
 
 		// Open up the state database.
@@ -200,7 +201,7 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 	// We're done messing around with the database, so we can now commit the changes to the DB.
 	// Note that this doesn't actually write the changes to disk.
 	log.Info("Committing state DB")
-	newRoot, err := db.Commit(true)
+	newRoot, err := db.Commit(*num, true)
 	if err != nil {
 		return nil, err
 	}

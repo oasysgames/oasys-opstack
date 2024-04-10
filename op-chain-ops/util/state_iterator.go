@@ -54,7 +54,11 @@ func IterateState(dbFactory DBFactory, address common.Address, cb StateCallback,
 			return
 		}
 
-		it := trie.NewIterator(st.NodeIterator(start.Bytes()))
+		nit, err := st.NodeIterator(start.Bytes())
+		if err != nil {
+			log.Crit("cannot create node iterator", "err", err)
+		}
+		it := trie.NewIterator(nit)
 
 		// Below code is largely based on db.ForEachStorage. We can't use that
 		// because it doesn't allow us to specify a start and end key.
