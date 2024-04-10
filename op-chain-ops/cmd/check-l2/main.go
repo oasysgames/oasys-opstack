@@ -232,10 +232,10 @@ func checkPredeployConfig(client *ethclient.Client, name string) error {
 				return fmt.Errorf("WETH9: %w", err)
 			}
 
-		case predeploys.GovernanceTokenAddr:
-			if err := checkGovernanceToken(p, client); err != nil {
-				return fmt.Errorf("GovernanceToken: %w", err)
-			}
+		// case predeploys.GovernanceTokenAddr:
+		// 	if err := checkGovernanceToken(p, client); err != nil {
+		// 		return fmt.Errorf("GovernanceToken: %w", err)
+		// 	}
 
 		case predeploys.L2ERC721BridgeAddr:
 			if err := checkL2ERC721Bridge(p, client); err != nil {

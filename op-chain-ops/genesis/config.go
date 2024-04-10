@@ -440,6 +440,66 @@ func (d *DeployConfig) GetDeployedAddresses(hh *hardhat.Hardhat) error {
 	return nil
 }
 
+// GetL1DeploymentAddresses will get the deployed addresses of deployed L1 contracts
+// from a JSON file on disk at the given path.
+func (d *DeployConfig) GetL1DeploymentAddresses(file string) error {
+	f, err := os.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	var addresses map[string]string
+	if err := json.Unmarshal(f, &addresses); err != nil {
+		return err
+	}
+
+	setter := func(name string, p *common.Address) error {
+		if val, ok := addresses[name]; ok {
+			addr := common.HexToAddress(val)
+			p = &addr
+			return nil
+		}
+		return fmt.Errorf("%s is not found", name)
+
+	}
+
+	if d.L1CrossDomainMessengerProxy == (common.Address{}) {
+		err := setter("L1CrossDomainMessengerProxy", &d.L1CrossDomainMessengerProxy)
+		if err != nil {
+			return err
+		}
+	}
+
+	if d.L1StandardBridgeProxy == (common.Address{}) {
+		err := setter("L1StandardBridgeProxy", &d.L1StandardBridgeProxy)
+		if err != nil {
+			return err
+		}
+	}
+
+	if d.L1ERC721BridgeProxy == (common.Address{}) {
+		err := setter("L1ERC721BridgeProxy", &d.L1ERC721BridgeProxy)
+		if err != nil {
+			return err
+		}
+	}
+
+	if d.SystemConfigProxy == (common.Address{}) {
+		err := setter("SystemConfigProxy", &d.SystemConfigProxy)
+		if err != nil {
+			return err
+		}
+	}
+
+	if d.OptimismPortalProxy == (common.Address{}) {
+		err := setter("OptimismPortalProxy", &d.OptimismPortalProxy)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (d *DeployConfig) GovernanceEnabled() bool {
 	return d.EnableGovernance
 }

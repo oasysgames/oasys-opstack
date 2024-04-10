@@ -74,14 +74,16 @@ func main() {
 				Required: true,
 			},
 			cli.StringFlag{
-				Name:     "network",
-				Usage:    "Name of hardhat deploy network",
-				Required: true,
+				Name:  "network",
+				Usage: "Name of hardhat deploy network. Required if --hardhat-deployments is used",
 			},
 			cli.StringFlag{
-				Name:     "hardhat-deployments",
-				Usage:    "Comma separated list of hardhat deployment directories",
-				Required: true,
+				Name:  "hardhat-deployments",
+				Usage: "Comma separated list of hardhat deployment directories. Cannot be used with --l1-deployments",
+			},
+			cli.StringFlag{
+				Name:  "l1-deployments",
+				Usage: "Path to L1 deployments JSON file. Cannot be used with --hardhat-deployments",
 			},
 			cli.BoolFlag{
 				Name:  "dry-run",
@@ -154,13 +156,6 @@ func main() {
 				EvmMessages:   evmMessages,
 			}
 
-			network := ctx.String("network")
-			deployments := strings.Split(ctx.String("hardhat-deployments"), ",")
-			hh, err := hardhat.New(network, []string{}, deployments)
-			if err != nil {
-				return err
-			}
-
 			l1RpcURL := ctx.String("l1-rpc-url")
 			l1Client, err := ethclient.Dial(l1RpcURL)
 			if err != nil {
@@ -200,8 +195,26 @@ func main() {
 			}
 
 			// Read the required deployment addresses from disk if required
-			if err := config.GetDeployedAddresses(hh); err != nil {
-				return err
+			network := ctx.String("network")
+			hhDeployments := strings.Split(ctx.String("hardhat-deployments"), ",")
+			l1Deployments := ctx.String("l1-deployments")
+			if len(hhDeployments) == 0 {
+				if network == "" {
+					return errors.New("please specify `--network` flag")
+				}
+				hh, err := hardhat.New(network, []string{}, hhDeployments)
+				if err != nil {
+					return err
+				}
+				if err := config.GetDeployedAddresses(hh); err != nil {
+					return err
+				}
+			} else if l1Deployments != "" {
+				if err := config.GetL1DeploymentAddresses(l1Deployments); err != nil {
+					return err
+				}
+			} else {
+				return errors.New("please specify either `--hardhat-deployments` or `--l1-deployments`")
 			}
 
 			if err := config.Check(); err != nil {

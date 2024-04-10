@@ -19,17 +19,17 @@ var (
 	// UntouchablePredeploys are addresses in the predeploy namespace
 	// that should not be touched by the migration process.
 	UntouchablePredeploys = map[common.Address]bool{
-		predeploys.GovernanceTokenAddr: true,
-		predeploys.WETH9Addr:           true,
+		// predeploys.GovernanceTokenAddr: true,
+		predeploys.WETH9Addr: true,
 	}
 
 	// UntouchableCodeHashes represent the bytecode hashes of contracts
 	// that should not be touched by the migration process.
 	UntouchableCodeHashes = map[common.Address]ChainHashMap{
-		predeploys.GovernanceTokenAddr: {
-			1: common.HexToHash("0x8551d935f4e67ad3c98609f0d9f0f234740c4c4599f82674633b55204393e07f"),
-			5: common.HexToHash("0xc4a213cf5f06418533e5168d8d82f7ccbcc97f27ab90197c2c051af6a4941cf9"),
-		},
+		// predeploys.GovernanceTokenAddr: {
+		// 	1: common.HexToHash("0x8551d935f4e67ad3c98609f0d9f0f234740c4c4599f82674633b55204393e07f"),
+		// 	5: common.HexToHash("0xc4a213cf5f06418533e5168d8d82f7ccbcc97f27ab90197c2c051af6a4941cf9"),
+		// },
 		predeploys.WETH9Addr: {
 			1: common.HexToHash("0x779bbf2a738ef09d961c945116197e2ac764c1b39304b2b4418cd4e42668b173"),
 			5: common.HexToHash("0x779bbf2a738ef09d961c945116197e2ac764c1b39304b2b4418cd4e42668b173"),
@@ -43,7 +43,7 @@ var (
 	// that do not have their storage wiped. It is safe for all other
 	// predeploys to have their storage wiped.
 	FrozenStoragePredeploys = map[common.Address]bool{
-		predeploys.GovernanceTokenAddr:     true,
+		// predeploys.GovernanceTokenAddr:     true,
 		predeploys.WETH9Addr:               true,
 		predeploys.LegacyMessagePasserAddr: true,
 		predeploys.LegacyERC20ETHAddr:      true,
@@ -56,7 +56,15 @@ var (
 // can be set in state and the ProxyAdmin can be set as the admin of the
 // Proxy.
 func SetL2Proxies(db vm.StateDB) error {
-	return setProxies(db, predeploys.ProxyAdminAddr, BigL2PredeployNamespace, 2048)
+	err := setProxies(db, predeploys.ProxyAdminAddr, BigL2PredeployNamespace, 2048)
+	if err != nil {
+		return err
+	}
+	err = setProxies(db, predeploys.ProxyAdminAddr, OasysBigL2PredeployNamespace, 256)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // WipePredeployStorage will wipe the storage of all L2 predeploys expect

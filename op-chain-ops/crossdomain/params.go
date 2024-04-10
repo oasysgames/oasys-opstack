@@ -24,4 +24,16 @@ var ParamsByChainID = map[int]*Params{
 	5: {
 		new(big.Int),
 	},
+	248: {
+		// Oasys Mainnet
+		new(big.Int),
+	},
+	9372: {
+		// Oasys Testnet
+		new(big.Int),
+	},
+	12345: {
+		// Local Network
+		new(big.Int),
+	},
 }

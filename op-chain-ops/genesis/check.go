@@ -260,7 +260,7 @@ func PostCheckPredeploys(prevDB, currDB *state.StateDB) error {
 		// There must be an admin
 		admin := currDB.GetState(addr, AdminSlot)
 		adminAddr := common.BytesToAddress(admin.Bytes())
-		if addr != predeploys.ProxyAdminAddr && addr != predeploys.GovernanceTokenAddr && adminAddr != predeploys.ProxyAdminAddr {
+		if addr != predeploys.ProxyAdminAddr && adminAddr != predeploys.ProxyAdminAddr {
 			return fmt.Errorf("expected admin for %s to be %s but got %s", addr, predeploys.ProxyAdminAddr, adminAddr)
 		}
 
