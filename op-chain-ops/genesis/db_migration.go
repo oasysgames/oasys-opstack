@@ -21,10 +21,6 @@ import (
 var (
 	abiTrue  = common.Hash{31: 0x01}
 	abiFalse = common.Hash{}
-	// BedrockTransitionBlockExtraData represents the extradata
-	// set in the very first bedrock block. This value must be
-	// less than 32 bytes long or it will create an invalid block.
-	BedrockTransitionBlockExtraData = []byte("BEDROCK")
 )
 
 type MigrationResult struct {
