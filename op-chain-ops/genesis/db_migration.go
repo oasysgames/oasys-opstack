@@ -166,7 +166,7 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 	// set on L2 and update the implementations for all predeployed contracts that are behind
 	// proxies (NOT the GovernanceToken or WETH9).
 	log.Info("Updating implementations for predeployed contracts")
-	if err := SetImplementations(db, storage, immutable); err != nil {
+	if err := SetImplementations(db, config, storage, immutable); err != nil {
 		return nil, fmt.Errorf("cannot set implementations: %w", err)
 	}
 

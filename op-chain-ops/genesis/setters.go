@@ -42,6 +42,11 @@ func setProxies(db vm.StateDB, proxyAdminAddr common.Address, namespace *big.Int
 		bigAddr := new(big.Int).Or(namespace, new(big.Int).SetUint64(i))
 		addr := common.BigToAddress(bigAddr)
 
+		if UntouchablePredeploys[addr] {
+			log.Info("Skipping setting proxy", "address", addr)
+			continue
+		}
+
 		if !db.Exist(addr) {
 			db.CreateAccount(addr)
 		}

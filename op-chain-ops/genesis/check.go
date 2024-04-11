@@ -73,12 +73,12 @@ var (
 			AdminSlot:          common.HexToHash("0x0000000000000000000000004200000000000000000000000000000000000018"),
 			ImplementationSlot: common.HexToHash("0x000000000000000000000000c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d30007"),
 		},
-		predeploys.L2StandardBridgeAddr:             eip1967Slots(predeploys.L2StandardBridgeAddr),
-		predeploys.SequencerFeeVaultAddr:            eip1967Slots(predeploys.SequencerFeeVaultAddr),
-		predeploys.OptimismMintableERC20FactoryAddr: eip1967Slots(predeploys.OptimismMintableERC20FactoryAddr),
-		predeploys.L1BlockNumberAddr:                eip1967Slots(predeploys.L1BlockNumberAddr),
-		predeploys.GasPriceOracleAddr:               eip1967Slots(predeploys.GasPriceOracleAddr),
-		//predeploys.L1BlockAddr:                       eip1967Slots(predeploys.L1BlockAddr),
+		predeploys.L2StandardBridgeAddr:              eip1967Slots(predeploys.L2StandardBridgeAddr),
+		predeploys.SequencerFeeVaultAddr:             eip1967Slots(predeploys.SequencerFeeVaultAddr),
+		predeploys.OptimismMintableERC20FactoryAddr:  eip1967Slots(predeploys.OptimismMintableERC20FactoryAddr),
+		predeploys.L1BlockNumberAddr:                 eip1967Slots(predeploys.L1BlockNumberAddr),
+		predeploys.GasPriceOracleAddr:                eip1967Slots(predeploys.GasPriceOracleAddr),
+		predeploys.L1BlockAddr:                       eip1967Slots(predeploys.L1BlockAddr),
 		predeploys.L2ERC721BridgeAddr:                eip1967Slots(predeploys.L2ERC721BridgeAddr),
 		predeploys.OptimismMintableERC721FactoryAddr: eip1967Slots(predeploys.OptimismMintableERC721FactoryAddr),
 		// ProxyAdmin is not a proxy, and only has the _owner slot set.
@@ -90,8 +90,10 @@ var (
 			AdminSlot:          common.HexToHash("0x0000000000000000000000004200000000000000000000000000000000000018"),
 			ImplementationSlot: common.HexToHash("0x000000000000000000000000c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d30018"),
 		},
-		predeploys.BaseFeeVaultAddr: eip1967Slots(predeploys.BaseFeeVaultAddr),
-		predeploys.L1FeeVaultAddr:   eip1967Slots(predeploys.L1FeeVaultAddr),
+		predeploys.BaseFeeVaultAddr:   eip1967Slots(predeploys.BaseFeeVaultAddr),
+		predeploys.L1FeeVaultAddr:     eip1967Slots(predeploys.L1FeeVaultAddr),
+		predeploys.SchemaRegistryAddr: eip1967Slots(predeploys.SchemaRegistryAddr),
+		predeploys.EASAddr:            eip1967Slots(predeploys.EASAddr),
 	}
 )
 
@@ -241,45 +243,54 @@ func PostCheckUntouchables(udb state.Database, currDB *state.StateDB, prevRoot c
 // PostCheckPredeploys will check that there is code at each predeploy
 // address
 func PostCheckPredeploys(prevDB, currDB *state.StateDB) error {
-	for i := uint64(0); i <= 2048; i++ {
-		// Compute the predeploy address
-		bigAddr := new(big.Int).Or(BigL2PredeployNamespace, new(big.Int).SetUint64(i))
-		addr := common.BigToAddress(bigAddr)
-		// Get the code for the predeploy
-		code := currDB.GetCode(addr)
-		// There must be code for the predeploy
-		if len(code) == 0 {
-			return fmt.Errorf("no code found at predeploy %s", addr)
-		}
+	proxyNameSpaces := []struct {
+		space *big.Int
+		count uint64
+	}{
+		{space: BigL2PredeployNamespace, count: 2048},
+		{space: OasysBigL2PredeployNamespace, count: 256},
+	}
+	for _, s := range proxyNameSpaces {
+		for i := uint64(0); i <= s.count; i++ {
+			// Compute the predeploy address
+			bigAddr := new(big.Int).Or(s.space, new(big.Int).SetUint64(i))
+			addr := common.BigToAddress(bigAddr)
+			// Get the code for the predeploy
+			code := currDB.GetCode(addr)
+			// There must be code for the predeploy
+			if len(code) == 0 {
+				return fmt.Errorf("no code found at predeploy %s", addr)
+			}
 
-		if UntouchablePredeploys[addr] {
-			log.Trace("skipping untouchable predeploy", "address", addr)
-			continue
-		}
+			if UntouchablePredeploys[addr] {
+				log.Trace("skipping untouchable predeploy", "address", addr)
+				continue
+			}
 
-		// There must be an admin
-		admin := currDB.GetState(addr, AdminSlot)
-		adminAddr := common.BytesToAddress(admin.Bytes())
-		if addr != predeploys.ProxyAdminAddr && adminAddr != predeploys.ProxyAdminAddr {
-			return fmt.Errorf("expected admin for %s to be %s but got %s", addr, predeploys.ProxyAdminAddr, adminAddr)
-		}
+			// There must be an admin
+			admin := currDB.GetState(addr, AdminSlot)
+			adminAddr := common.BytesToAddress(admin.Bytes())
+			if addr != predeploys.ProxyAdminAddr && adminAddr != predeploys.ProxyAdminAddr {
+				return fmt.Errorf("expected admin for %s to be %s but got %s", addr, predeploys.ProxyAdminAddr, adminAddr)
+			}
 
-		// Balances and nonces should match legacy
-		oldNonce := prevDB.GetNonce(addr)
-		oldBalance := ether.GetOVMETHBalance(prevDB, addr)
-		newNonce := currDB.GetNonce(addr)
-		newBalance := currDB.GetBalance(addr)
-		if oldNonce != newNonce {
-			return fmt.Errorf("expected nonce for %s to be %d but got %d", addr, oldNonce, newNonce)
-		}
-		if oldBalance.Cmp(newBalance) != 0 {
-			return fmt.Errorf("expected balance for %s to be %d but got %d", addr, oldBalance, newBalance)
+			// Balances and nonces should match legacy
+			oldNonce := prevDB.GetNonce(addr)
+			oldBalance := ether.GetOVMETHBalance(prevDB, addr)
+			newNonce := currDB.GetNonce(addr)
+			newBalance := currDB.GetBalance(addr)
+			if oldNonce != newNonce {
+				return fmt.Errorf("expected nonce for %s to be %d but got %d", addr, oldNonce, newNonce)
+			}
+			if oldBalance.Cmp(newBalance) != 0 {
+				return fmt.Errorf("expected balance for %s to be %d but got %d", addr, oldBalance, newBalance)
+			}
 		}
 	}
 
 	// For each predeploy, check that we've set the implementation correctly when
 	// necessary and that there's code at the implementation.
-	for _, deploy := range predeploys.Predeploys {
+	for name, deploy := range predeploys.Predeploys {
 		proxyAddr := &deploy.Address
 
 		if UntouchablePredeploys[*proxyAddr] {
@@ -297,6 +308,11 @@ func PostCheckPredeploys(prevDB, currDB *state.StateDB) error {
 			if len(implCode) == 0 {
 				return errors.New("no code found at proxy admin")
 			}
+			continue
+		}
+
+		if deploy.ProxyDisabled {
+			log.Debug("skipping proxy disabled", "name", name, "address", deploy.Address)
 			continue
 		}
 

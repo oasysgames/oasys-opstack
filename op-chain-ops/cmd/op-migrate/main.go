@@ -272,6 +272,9 @@ func main() {
 			if err != nil {
 				return err
 			}
+			// When migrating from legacy, use the timestamp of the deploy config instead
+			// of the L1 block time as the L2 starting timestamp.
+			opNodeConfig.Genesis.L2Time = uint64(config.L2OutputOracleStartingTimestamp)
 
 			if err := writeJSON(ctx.String("rollup-config-out"), opNodeConfig); err != nil {
 				return err

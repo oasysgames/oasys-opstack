@@ -800,6 +800,7 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"msgNonce":         0,
 	}
 	storage["L2StandardBridge"] = state.StorageValues{}
+	storage["OasysL2ERC721Bridge"] = state.StorageValues{}
 	storage["L1Block"] = state.StorageValues{
 		"number":         block.Number(),
 		"timestamp":      block.Time(),
