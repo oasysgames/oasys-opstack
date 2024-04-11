@@ -421,7 +421,7 @@ func PostCheckLegacyETH(prevDB, migratedDB *state.StateDB, migrationData crossdo
 	}
 
 	var count int
-	threshold := 100 - int(100*OVMETHSampleLikelihood)
+	threshold := 100 - int(100*OVMETHSampleLikelihood) + 100
 	progress := util.ProgressLogger(100, "checking legacy eth balance slots")
 	var innerErr error
 	err := prevDB.ForEachStorage(predeploys.LegacyERC20ETHAddr, func(key, value common.Hash) bool {
