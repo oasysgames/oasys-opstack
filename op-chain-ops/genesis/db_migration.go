@@ -291,8 +291,10 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 	// Enable Regolith from the start of Bedrock
 	cfg.RegolithTime = new(uint64)
 	cfg.Optimism = &params.OptimismConfig{
-		EIP1559Denominator: config.EIP1559Denominator,
-		EIP1559Elasticity:  config.EIP1559Elasticity,
+
+	// Set the zero transaction fee setting.
+	if config.L2ZeroFeeTime != nil {
+		cfg.ZeroFeeTimes = append(cfg.ZeroFeeTimes, *config.L2ZeroFeeTime)
 	}
 
 	// Write the chain config to disk.
