@@ -206,6 +206,19 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 		return nil, err
 	}
 
+	gasLimit := config.L2GenesisBlockGasLimit
+	if gasLimit == 0 {
+		gasLimit = defaultGasLimit
+	}
+	baseFee := config.L2GenesisBlockBaseFeePerGas
+	if baseFee == nil {
+		baseFee = newHexBig(params.InitialBaseFee)
+	}
+	difficulty := config.L2GenesisBlockDifficulty
+	if difficulty == nil {
+		difficulty = newHexBig(0)
+	}
+
 	// Create the header for the Bedrock transition block.
 	bedrockHeader := &types.Header{
 		ParentHash:  header.Hash(),
@@ -215,15 +228,15 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 		TxHash:      types.EmptyRootHash,
 		ReceiptHash: types.EmptyRootHash,
 		Bloom:       types.Bloom{},
-		Difficulty:  common.Big0,
+		Difficulty:  difficulty.ToInt(),
 		Number:      new(big.Int).Add(header.Number, common.Big1),
-		GasLimit:    (uint64)(config.L2GenesisBlockGasLimit),
+		GasLimit:    uint64(gasLimit),
 		GasUsed:     0,
 		Time:        uint64(config.L2OutputOracleStartingTimestamp),
 		Extra:       BedrockTransitionBlockExtraData,
 		MixDigest:   common.Hash{},
 		Nonce:       types.BlockNonce{},
-		BaseFee:     big.NewInt(params.InitialBaseFee),
+		BaseFee:     baseFee.ToInt(),
 	}
 
 	// Create the Bedrock transition block from the header. Note that there are no transactions,
@@ -291,6 +304,10 @@ func MigrateDB(ldb ethdb.Database, config *DeployConfig, l1Block *types.Block, m
 	// Enable Regolith from the start of Bedrock
 	cfg.RegolithTime = new(uint64)
 	cfg.Optimism = &params.OptimismConfig{
+		EIP1559Denominator:       config.EIP1559Denominator,
+		EIP1559Elasticity:        config.EIP1559Elasticity,
+		EIP1559DenominatorCanyon: config.EIP1559DenominatorCanyon,
+	}
 
 	// Set the zero transaction fee setting.
 	if config.L2ZeroFeeTime != nil {
