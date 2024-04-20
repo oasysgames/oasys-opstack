@@ -194,3 +194,7 @@ install-geth:
  			go install -v github.com/ethereum/go-ethereum/cmd/geth@$(shell cat .gethrc); \
  			echo "Installed geth!"; true)
 .PHONY: install-geth
+
+op-migrate:
+	make -C ./op-chain-ops op-migrate
+.PHONY: op-migrate

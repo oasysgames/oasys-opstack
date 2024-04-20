@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - op-migrate
 
 jobs:
   release:
@@ -38,4 +40,5 @@ jobs:
         with:
           files: docker-bake.hcl
           set: '*.platform=linux/amd64,linux/arm64'
+          targets: op-migrate
           push: true

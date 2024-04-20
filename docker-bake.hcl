@@ -45,6 +45,10 @@ variable "OP_PROPOSER_VERSION" {
   default = "${GIT_VERSION}"
 }
 
+variable "OP_MIGRATE_VERSION" {
+  default = "${GIT_VERSION}"
+}
+
 variable "OP_CHALLENGER_VERSION" {
   default = "${GIT_VERSION}"
 }
@@ -102,6 +106,19 @@ target "op-proposer" {
   target = "op-proposer-target"
   platforms = split(",", PLATFORMS)
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-proposer:${tag}"]
+}
+
+target "op-migrate" {
+  dockerfile = "ops/docker/op-stack-go/Dockerfile"
+  context = "."
+  args = {
+    GIT_COMMIT = "${GIT_COMMIT}"
+    GIT_DATE = "${GIT_DATE}"
+    OP_MIGRATE_VERSION = "${OP_MIGRATE_VERSION}"
+  }
+  target = "op-migrate-target"
+  platforms = split(",", PLATFORMS)
+  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-migrate:${tag}"]
 }
 
 target "op-challenger" {

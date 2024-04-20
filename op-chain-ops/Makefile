@@ -13,3 +13,9 @@ fuzz:
 	go test -run NOTAREALTEST -v -fuzztime 10s -fuzz=FuzzVersionedNonce ./crossdomain
 
 .PHONY: check-l2 test fuzz
+
+op-migrate:
+	go build -o ./bin/op-migrate ./cmd/op-migrate/main.go
+	go build -o ./bin/op-migrate-check ./cmd/check-migration/main.go
+	go build -o ./bin/op-migrate-rollover ./cmd/rollover/main.go
+.PHONY: op-migrate

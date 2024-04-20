@@ -85,6 +85,11 @@ ARG OP_PROPOSER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/root/.cache/go-build cd op-proposer && make op-proposer  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_PROPOSER_VERSION"
 
+FROM --platform=$BUILDPLATFORM builder as op-migrate-builder
+ARG OP_MIGRATE_VERSION=v0.0.0
+RUN --mount=type=cache,target=/root/.cache/go-build cd op-chain-ops && make op-migrate  \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_MIGRATE_VERSION"
+
 # Base layer for all services.
 FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as appbase
 COPY --from=builder /etc/ssl /etc/ssl
@@ -128,3 +133,8 @@ FROM --platform=$TARGETPLATFORM appbase as op-proposer-target
 COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
 CMD ["op-proposer"]
 
+FROM --platform=$TARGETPLATFORM appbase as op-migrate-target
+COPY --from=op-migrate-builder /app/op-chain-ops/bin/op-migrate /usr/local/bin/
+COPY --from=op-migrate-builder /app/op-chain-ops/bin/op-migrate-check /usr/local/bin/
+COPY --from=op-migrate-builder /app/op-chain-ops/bin/op-migrate-rollover /usr/local/bin/
+CMD ["bash"]
