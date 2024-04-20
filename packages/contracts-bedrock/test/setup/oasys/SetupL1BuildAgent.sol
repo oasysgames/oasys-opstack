@@ -101,9 +101,6 @@ contract SetupL1BuildAgent is Test {
         permissionedFactory = _deployPermissionedContractFactory(msg.sender);
 
         (l1Agent, l1Deposit, l2OracleVerifier) = _deployL1BuildContracts(permissionedFactory);
-
-        vm.prank(depositor);
-        l1Deposit.deposit{ value: 1 ether }(builder);
     }
 
     function _addBalanceToTestWallets() internal {

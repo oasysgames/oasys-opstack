@@ -423,8 +423,6 @@ contract Build is Script {
         json.serialize("l2OutputOracleProposer", deployCfg.l2OutputOracleProposer);
         json.serialize("l2OutputOracleChallenger", deployCfg.l2OutputOracleChallenger);
 
-        json.serialize("messageRelayer", deployCfg.messageRelayer);
-
         json.serialize("finalizationPeriodSeconds", deployCfg.finalizationPeriodSeconds);
 
         json.serialize("proxyAdminOwner", deployCfg.proxyAdminOwner);

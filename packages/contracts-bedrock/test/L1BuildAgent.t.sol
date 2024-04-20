@@ -29,6 +29,10 @@ contract L1BuildAgentTest is L1BuildAgentTestCommon {
     function setUp() public override {
         super.setUp();
 
+        // Deploy OAS and deposit to the L1BuildDeposit
+        vm.prank(depositor);
+        l1Deposit.deposit{ value: 1 ether }(builder);
+
         vm.prank(builder);
         deployment = _runL1BuildAgent(
             5555,

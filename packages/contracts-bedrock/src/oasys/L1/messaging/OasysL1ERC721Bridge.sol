@@ -77,7 +77,7 @@ contract OasysL1ERC721Bridge is L1ERC721Bridge, ILegacyL1ERC721Bridge {
     )
         external
     {
-        this.finalizeBridgeERC721(_l1Token, _l2Token, _from, _to, _tokenId, _data);
+        finalizeBridgeERC721(_l1Token, _l2Token, _from, _to, _tokenId, _data);
     }
 
     /// @inheritdoc L1ERC721Bridge

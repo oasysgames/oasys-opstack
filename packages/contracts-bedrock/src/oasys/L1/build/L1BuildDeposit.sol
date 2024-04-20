@@ -27,6 +27,28 @@ contract L1BuildDeposit is ISemver, LegacyL1BuildDeposit {
     }
 
     /**
+     * @notice Marks the builder as built.
+     * @param _builder Address of the Verse-Builder.
+     */
+    function build(address _builder) public override {
+        bool isUpgradingExistingL2 = _isBuilderLegacy(_builder);
+
+        // If not upgrading from the legacy, call the original build function.
+        if (!isUpgradingExistingL2) {
+            return super.build(_builder);
+        }
+
+        require(msg.sender == agentAddress, "only L1BuildAgent can call me");
+        // Skip deposit check for the legacy builders.
+        // require(_depositTotal[_builder] >= requiredAmount, "deposit amount shortage");
+        require(getBuildBlock(_builder) == 0, "already built by builder");
+
+        _buildBlock[_builder] = block.number;
+
+        emit Build(_builder, block.number);
+    }
+
+    /**
      * Returns the total amount of the OAS tokens, including the legacy version.
      * @param _builder Address of the Verse-Builder.
      * @return amount Total amount of the OAS tokens.
@@ -40,11 +62,7 @@ contract L1BuildDeposit is ISemver, LegacyL1BuildDeposit {
      * @param _builder Address of the Verse-Builder.
      */
     function isBuilderGlobally(address _builder) public view returns (bool) {
-        bool builtLegacy;
-        if (legacyL1BuildDeposit != IL1BuildDeposit(address(0))) {
-            builtLegacy = legacyL1BuildDeposit.getBuildBlock(_builder) > 0;
-        }
-        return builtLegacy || isBuilderInternally(_builder);
+        return _isBuilderLegacy(_builder) || isBuilderInternally(_builder);
     }
 
     /**
@@ -53,5 +71,12 @@ contract L1BuildDeposit is ISemver, LegacyL1BuildDeposit {
      */
     function isBuilderInternally(address _builder) public view returns (bool) {
         return getBuildBlock(_builder) > 0;
+    }
+
+    function _isBuilderLegacy(address _builder) internal view returns (bool) {
+        if (legacyL1BuildDeposit != IL1BuildDeposit(address(0))) {
+            return legacyL1BuildDeposit.getBuildBlock(_builder) > 0;
+        }
+        return false;
     }
 }
