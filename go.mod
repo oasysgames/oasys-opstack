@@ -211,7 +211,7 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-replace github.com/ethereum/go-ethereum v1.13.5 => github.com/oasysgames/oasys-op-geth v0.0.0-570b265
+replace github.com/ethereum/go-ethereum v1.13.5 => github.com/oasysgames/oasys-op-geth v1.0.1-0.20240420041232-b8630a56908a
 
 //replace github.com/ethereum-optimism/superchain-registry/superchain => ../superchain-registry/superchain
 //replace github.com/ethereum/go-ethereum v1.13.5 => ../go-ethereum
