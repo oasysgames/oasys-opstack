@@ -89,7 +89,8 @@ interface IL1BuildAgent {
         uint256 _chainId,
         address addressManager,
         address oldL1CrossDomainMessenger
-    ) external;
+    )
+        external;
 
     function build(
         uint256 chainId,

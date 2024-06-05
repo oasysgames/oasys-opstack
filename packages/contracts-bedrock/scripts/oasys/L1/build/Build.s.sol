@@ -142,6 +142,9 @@ contract Build is Script {
         // L2GenesisRegolithTimeOffset is the number of seconds after genesis block that Regolith hard fork activates.
         // Set it to 0 to activate at genesis. Nil to disable Regolith.
         uint256 l2GenesisRegolithTimeOffset;
+        // l2GenesisCanyonTimeOffset is the number of seconds after genesis block that Canyon hard fork activates.
+        // Set it to 0 to activate at genesis. Nil to disable Canyon.
+        uint256 l2GenesisCanyonTimeOffset;
         // EIP1559Denominator is the denominator of EIP1559 base fee market.
         // Set the default value of op-chain-ops/genesis/genesis.go
         // https://github.com/oasysgames/oasys-opstack/blob/5648932ac8a45598de70d857cc99c91a8ebce1fc/op-chain-ops/genesis/genesis.go#L32
@@ -280,6 +283,7 @@ contract Build is Script {
             l2GenesisBlockGasLimit: l2GasLimit,
             l2GenesisBlockBaseFeePerGas: 0,
             l2GenesisRegolithTimeOffset: 0,
+            l2GenesisCanyonTimeOffset: 0,
             // ----
             eip1559Denominator: 50,
             eip1559DenominatorCanyon: 250,
@@ -456,6 +460,7 @@ contract Build is Script {
         json.serialize("l2GenesisBlockGasLimit", _toHexWithoutZeroPadding(deployCfg.l2GenesisBlockGasLimit));
         json.serialize("l2GenesisBlockBaseFeePerGas", _toHexWithoutZeroPadding(deployCfg.l2GenesisBlockBaseFeePerGas));
         json.serialize("l2GenesisRegolithTimeOffset", _toHexWithoutZeroPadding(deployCfg.l2GenesisRegolithTimeOffset));
+        json.serialize("l2GenesisCanyonTimeOffset", _toHexWithoutZeroPadding(deployCfg.l2GenesisCanyonTimeOffset));
 
         json.serialize("eip1559Denominator", deployCfg.eip1559Denominator);
         json.serialize("eip1559DenominatorCanyon", deployCfg.eip1559DenominatorCanyon);
