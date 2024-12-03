@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -29,7 +28,7 @@ type ValidBatchTestCase struct {
 	Expected       BatchValidity
 	ExpectedLog    string // log message that must be included
 	NotExpectedLog string // log message that must not be included
-	SpanBatchTime  *uint64
+	DeltaTime      *uint64
 }
 
 type TestLogHandler struct {
@@ -42,9 +41,6 @@ func (th *TestLogHandler) Log(r *log.Record) error {
 	return th.handler.Log(r)
 }
 
-var HashA = common.Hash{0x0a}
-var HashB = common.Hash{0x0b}
-
 func TestValidBatch(t *testing.T) {
 	defaultConf := rollup.Config{
 		Genesis: rollup.Genesis{
@@ -54,7 +50,7 @@ func TestValidBatch(t *testing.T) {
 		SeqWindowSize:     4,
 		MaxSequencerDrift: 6,
 		// other config fields are ignored and can be left empty.
-		SpanBatchTime: nil,
+		DeltaTime: nil,
 	}
 
 	rng := rand.New(rand.NewSource(1234))
@@ -584,9 +580,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided,
-			ExpectedLog:   "missing L1 block input, cannot proceed with batch checking",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided,
+			ExpectedLog: "missing L1 block input, cannot proceed with batch checking",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "future timestamp",
@@ -604,9 +600,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchFuture,
-			ExpectedLog:   "received out-of-order batch for future processing after next batch",
-			SpanBatchTime: &minTs,
+			Expected:    BatchFuture,
+			ExpectedLog: "received out-of-order batch for future processing after next batch",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "misaligned timestamp",
@@ -624,9 +620,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "span batch has no new blocks after safe head",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "span batch has no new blocks after safe head",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "invalid parent block hash",
@@ -644,9 +640,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "ignoring batch with mismatching parent hash",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "ignoring batch with mismatching parent hash",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequence window expired",
@@ -664,9 +660,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch was included too late, sequence window expired",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch was included too late, sequence window expired",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "epoch too old, but good parent hash and timestamp", // repeat of now outdated l2A3 data
@@ -690,9 +686,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "dropped batch, epoch is too old",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "dropped batch, epoch is too old",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "insufficient L1 info for eager derivation",
@@ -710,9 +706,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided,
-			ExpectedLog:   "eager batch wants to advance epoch, but could not without more L1 blocks",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided,
+			ExpectedLog: "eager batch wants to advance epoch, but could not without more L1 blocks",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "insufficient L1 info for eager derivation - long span",
@@ -737,9 +733,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided,
-			ExpectedLog:   "need more l1 blocks to check entire origins of span batch",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided,
+			ExpectedLog: "need more l1 blocks to check entire origins of span batch",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "epoch too new",
@@ -757,9 +753,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch is for future epoch too far ahead, while it has the next timestamp, so it must be invalid",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch is for future epoch too far ahead, while it has the next timestamp, so it must be invalid",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "epoch hash wrong",
@@ -777,9 +773,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch is for different L1 chain, epoch hash does not match",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch is for different L1 chain, epoch hash does not match",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "epoch hash wrong - long span",
@@ -804,9 +800,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch is for different L1 chain, epoch hash does not match",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch is for different L1 chain, epoch hash does not match",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on same epoch with non-empty txs",
@@ -824,9 +820,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch exceeded sequencer time drift, sequencer must adopt new L1 origin to include transactions again",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch exceeded sequencer time drift, sequencer must adopt new L1 origin to include transactions again",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on same epoch with non-empty txs - long span",
@@ -851,9 +847,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch exceeded sequencer time drift, sequencer must adopt new L1 origin to include transactions again",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch exceeded sequencer time drift, sequencer must adopt new L1 origin to include transactions again",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on changing epoch with non-empty txs",
@@ -871,9 +867,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch exceeded sequencer time drift, sequencer must adopt new L1 origin to include transactions again",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch exceeded sequencer time drift, sequencer must adopt new L1 origin to include transactions again",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on same epoch with empty txs and late next epoch",
@@ -891,8 +887,8 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchAccept, // accepted because empty & preserving L2 time invariant
-			SpanBatchTime: &minTs,
+			Expected:  BatchAccept, // accepted because empty & preserving L2 time invariant
+			DeltaTime: &minTs,
 		},
 		{
 			Name:       "sequencer time drift on changing epoch with empty txs",
@@ -918,7 +914,7 @@ func TestValidBatch(t *testing.T) {
 				}),
 			},
 			Expected:       BatchAccept, // accepted because empty & still advancing epoch
-			SpanBatchTime:  &minTs,
+			DeltaTime:      &minTs,
 			NotExpectedLog: "continuing with empty batch before late L1 block to preserve L2 time invariant",
 		},
 		{
@@ -937,9 +933,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided, // we have to wait till the next epoch is in sight to check the time
-			ExpectedLog:   "without the next L1 origin we cannot determine yet if this empty batch that exceeds the time drift is still valid",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided, // we have to wait till the next epoch is in sight to check the time
+			ExpectedLog: "without the next L1 origin we cannot determine yet if this empty batch that exceeds the time drift is still valid",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on same epoch with empty txs and no next epoch in sight yet - long span",
@@ -964,9 +960,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided, // we have to wait till the next epoch is in sight to check the time
-			ExpectedLog:   "without the next L1 origin we cannot determine yet if this empty batch that exceeds the time drift is still valid",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided, // we have to wait till the next epoch is in sight to check the time
+			ExpectedLog: "without the next L1 origin we cannot determine yet if this empty batch that exceeds the time drift is still valid",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on same epoch with empty txs and but in-sight epoch that invalidates it",
@@ -984,9 +980,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop, // dropped because it could have advanced the epoch to B
-			ExpectedLog:   "batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop, // dropped because it could have advanced the epoch to B
+			ExpectedLog: "batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "sequencer time drift on same epoch with empty txs and but in-sight epoch that invalidates it - long span",
@@ -1011,9 +1007,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop, // dropped because it could have advanced the epoch to B
-			ExpectedLog:   "batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop, // dropped because it could have advanced the epoch to B
+			ExpectedLog: "batch exceeded sequencer time drift without adopting next origin, and next L1 origin would have been valid",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "empty tx included",
@@ -1033,9 +1029,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "transaction data must not be empty, but found empty tx",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "transaction data must not be empty, but found empty tx",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "deposit tx included",
@@ -1055,9 +1051,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "sequencers may not embed any deposits into batch data, but found tx that has one",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "sequencers may not embed any deposits into batch data, but found tx that has one",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "valid batch same epoch",
@@ -1075,8 +1071,8 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchAccept,
-			SpanBatchTime: &minTs,
+			Expected:  BatchAccept,
+			DeltaTime: &minTs,
 		},
 		{
 			Name:       "valid batch changing epoch",
@@ -1094,8 +1090,8 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchAccept,
-			SpanBatchTime: &minTs,
+			Expected:  BatchAccept,
+			DeltaTime: &minTs,
 		},
 		{
 			Name:       "batch with L2 time before L1 time",
@@ -1113,9 +1109,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "block timestamp is less than L1 origin timestamp",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "block timestamp is less than L1 origin timestamp",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "batch with L2 time before L1 time - long span",
@@ -1140,9 +1136,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "block timestamp is less than L1 origin timestamp",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "block timestamp is less than L1 origin timestamp",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "valid overlapping batch",
@@ -1167,8 +1163,8 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchAccept,
-			SpanBatchTime: &minTs,
+			Expected:  BatchAccept,
+			DeltaTime: &minTs,
 		},
 		{
 			Name:       "longer overlapping batch",
@@ -1200,8 +1196,8 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchAccept,
-			SpanBatchTime: &minTs,
+			Expected:  BatchAccept,
+			DeltaTime: &minTs,
 		},
 		{
 			Name:       "fully overlapping batch",
@@ -1226,9 +1222,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "span batch has no new blocks after safe head",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "span batch has no new blocks after safe head",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "overlapping batch with invalid parent hash",
@@ -1253,9 +1249,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "ignoring batch with mismatching parent hash",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "ignoring batch with mismatching parent hash",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "overlapping batch with invalid origin number",
@@ -1280,9 +1276,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "overlapped block's L1 origin number does not match",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "overlapped block's L1 origin number does not match",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "overlapping batch with invalid tx",
@@ -1307,9 +1303,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "overlapped block's tx count does not match",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "overlapped block's tx count does not match",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "overlapping batch l2 fetcher error",
@@ -1341,9 +1337,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided,
-			ExpectedLog:   "failed to fetch L2 block",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided,
+			ExpectedLog: "failed to fetch L2 block",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "short block time",
@@ -1368,9 +1364,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch has misaligned timestamp, block time is too short",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch has misaligned timestamp, block time is too short",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "misaligned batch",
@@ -1395,9 +1391,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchDrop,
-			ExpectedLog:   "batch has misaligned timestamp, not overlapped exactly",
-			SpanBatchTime: &minTs,
+			Expected:    BatchDrop,
+			ExpectedLog: "batch has misaligned timestamp, not overlapped exactly",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "failed to fetch overlapping block payload",
@@ -1422,9 +1418,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			Expected:      BatchUndecided,
-			ExpectedLog:   "failed to fetch L2 block payload",
-			SpanBatchTime: &minTs,
+			Expected:    BatchUndecided,
+			ExpectedLog: "failed to fetch L2 block payload",
+			DeltaTime:   &minTs,
 		},
 		{
 			Name:       "singular batch before hard fork",
@@ -1440,8 +1436,8 @@ func TestValidBatch(t *testing.T) {
 					Transactions: []hexutil.Bytes{randTxData},
 				},
 			},
-			SpanBatchTime: &l1B.Time,
-			Expected:      BatchAccept,
+			DeltaTime: &l1B.Time,
+			Expected:  BatchAccept,
 		},
 		{
 			Name:       "span batch before hard fork",
@@ -1459,9 +1455,9 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			SpanBatchTime: &l1B.Time,
-			Expected:      BatchDrop,
-			ExpectedLog:   "received SpanBatch with L1 origin before SpanBatch hard fork",
+			DeltaTime:   &l1B.Time,
+			Expected:    BatchDrop,
+			ExpectedLog: "received SpanBatch with L1 origin before Delta hard fork",
 		},
 		{
 			Name:       "singular batch after hard fork",
@@ -1477,8 +1473,8 @@ func TestValidBatch(t *testing.T) {
 					Transactions: []hexutil.Bytes{randTxData},
 				},
 			},
-			SpanBatchTime: &l1A.Time,
-			Expected:      BatchAccept,
+			DeltaTime: &l1A.Time,
+			Expected:  BatchAccept,
 		},
 		{
 			Name:       "span batch after hard fork",
@@ -1496,8 +1492,8 @@ func TestValidBatch(t *testing.T) {
 					},
 				}),
 			},
-			SpanBatchTime: &l1A.Time,
-			Expected:      BatchAccept,
+			DeltaTime: &l1A.Time,
+			Expected:  BatchAccept,
 		},
 	}
 
@@ -1515,18 +1511,20 @@ func TestValidBatch(t *testing.T) {
 	// will return an error for block #99 (parent of l2A0)
 	l2Client.Mock.On("L2BlockRefByNumber", l2A0.Number-1).Return(eth.L2BlockRef{}, &tempErr)
 	// will return an error for l2A3
-	l2Client.Mock.On("PayloadByNumber", l2A3.Number).Return(&eth.ExecutionPayload{}, &tempErr)
+	l2Client.Mock.On("PayloadByNumber", l2A3.Number).Return(&eth.ExecutionPayloadEnvelope{}, &tempErr)
 
 	// make payloads for L2 blocks and set as expected return value of MockL2Client
 	for _, l2Block := range []eth.L2BlockRef{l2A0, l2A1, l2A2, l2B0} {
 		l2Client.ExpectL2BlockRefByNumber(l2Block.Number, l2Block, nil)
 		txData := l1InfoDepositTx(t, l2Block.L1Origin.Number)
-		payload := eth.ExecutionPayload{
-			ParentHash:   l2Block.ParentHash,
-			BlockNumber:  hexutil.Uint64(l2Block.Number),
-			Timestamp:    hexutil.Uint64(l2Block.Time),
-			BlockHash:    l2Block.Hash,
-			Transactions: []hexutil.Bytes{txData},
+		payload := eth.ExecutionPayloadEnvelope{
+			ExecutionPayload: &eth.ExecutionPayload{
+				ParentHash:   l2Block.ParentHash,
+				BlockNumber:  hexutil.Uint64(l2Block.Number),
+				Timestamp:    hexutil.Uint64(l2Block.Time),
+				BlockHash:    l2Block.Hash,
+				Transactions: []hexutil.Bytes{txData},
+			},
 		}
 		l2Client.Mock.On("L2BlockRefByNumber", l2Block.Number).Return(l2Block, &nilErr)
 		l2Client.Mock.On("PayloadByNumber", l2Block.Number).Return(&payload, &nilErr)
@@ -1535,8 +1533,8 @@ func TestValidBatch(t *testing.T) {
 	runTestCase := func(t *testing.T, testCase ValidBatchTestCase) {
 		ctx := context.Background()
 		rcfg := defaultConf
-		if testCase.SpanBatchTime != nil {
-			rcfg.SpanBatchTime = testCase.SpanBatchTime
+		if testCase.DeltaTime != nil {
+			rcfg.DeltaTime = testCase.DeltaTime
 		}
 		validity := CheckBatch(ctx, &rcfg, logger, testCase.L1Blocks, testCase.L2SafeHead, &testCase.Batch, &l2Client)
 		require.Equal(t, testCase.Expected, validity, "batch check must return expected validity level")
@@ -1574,12 +1572,14 @@ func TestValidBatch(t *testing.T) {
 	txData := l1InfoDepositTx(t, l2B1.L1Origin.Number)
 	randTx = testutils.RandomTx(rng, new(big.Int).SetUint64(rng.Uint64()), signer)
 	randTxData, _ = randTx.MarshalBinary()
-	payload := eth.ExecutionPayload{
-		ParentHash:   l2B0.Hash,
-		BlockNumber:  hexutil.Uint64(l2B1.Number),
-		Timestamp:    hexutil.Uint64(l2B1.Time),
-		BlockHash:    l2B1.Hash,
-		Transactions: []hexutil.Bytes{txData, randTxData},
+	payload := eth.ExecutionPayloadEnvelope{
+		ExecutionPayload: &eth.ExecutionPayload{
+			ParentHash:   l2B0.Hash,
+			BlockNumber:  hexutil.Uint64(l2B1.Number),
+			Timestamp:    hexutil.Uint64(l2B1.Time),
+			BlockHash:    l2B1.Hash,
+			Transactions: []hexutil.Bytes{txData, randTxData},
+		},
 	}
 	l2Client.Mock.On("PayloadByNumber", l2B1.Number).Return(&payload, &nilErr).Once()
 
@@ -1608,9 +1608,9 @@ func TestValidBatch(t *testing.T) {
 				},
 			}),
 		},
-		Expected:      BatchDrop,
-		ExpectedLog:   "overlapped block's transaction does not match",
-		SpanBatchTime: &minTs,
+		Expected:    BatchDrop,
+		ExpectedLog: "overlapped block's transaction does not match",
+		DeltaTime:   &minTs,
 	}
 
 	t.Run(differentTxtestCase.Name, func(t *testing.T) {
@@ -1618,13 +1618,15 @@ func TestValidBatch(t *testing.T) {
 	})
 
 	// ====== Test invalid TX for overlapping batches ======
-	payload = eth.ExecutionPayload{
-		ParentHash:  l2B0.Hash,
-		BlockNumber: hexutil.Uint64(l2B1.Number),
-		Timestamp:   hexutil.Uint64(l2B1.Time),
-		BlockHash:   l2B1.Hash,
-		// First TX is not a deposit TX. it will make error when extracting L2BlockRef from the payload
-		Transactions: []hexutil.Bytes{randTxData},
+	payload = eth.ExecutionPayloadEnvelope{
+		ExecutionPayload: &eth.ExecutionPayload{
+			ParentHash:  l2B0.Hash,
+			BlockNumber: hexutil.Uint64(l2B1.Number),
+			Timestamp:   hexutil.Uint64(l2B1.Time),
+			BlockHash:   l2B1.Hash,
+			// First TX is not a deposit TX. it will make error when extracting L2BlockRef from the payload
+			Transactions: []hexutil.Bytes{randTxData},
+		},
 	}
 	l2Client.Mock.On("PayloadByNumber", l2B1.Number).Return(&payload, &nilErr).Once()
 
@@ -1651,9 +1653,9 @@ func TestValidBatch(t *testing.T) {
 				},
 			}),
 		},
-		Expected:      BatchDrop,
-		ExpectedLog:   "failed to extract L2BlockRef from execution payload",
-		SpanBatchTime: &minTs,
+		Expected:    BatchDrop,
+		ExpectedLog: "failed to extract L2BlockRef from execution payload",
+		DeltaTime:   &minTs,
 	}
 
 	t.Run(invalidTxTestCase.Name, func(t *testing.T) {

@@ -9,6 +9,7 @@ import datetime
 import time
 import shutil
 import http.client
+import gzip
 from multiprocessing import Process, Queue
 import concurrent.futures
 from collections import namedtuple
@@ -57,6 +58,7 @@ def main():
     devnet_dir = pjoin(monorepo_dir, '.devnet')
     contracts_bedrock_dir = pjoin(monorepo_dir, 'packages', 'contracts-bedrock')
     deployment_dir = pjoin(contracts_bedrock_dir, 'deployments', 'devnetL1')
+    forge_dump_path = pjoin(contracts_bedrock_dir, 'Deploy-900.json')
     op_node_dir = pjoin(args.monorepo_dir, 'op-node')
     ops_bedrock_dir = pjoin(monorepo_dir, 'ops-bedrock')
     deploy_config_dir = pjoin(contracts_bedrock_dir, 'deploy-config')
@@ -70,6 +72,7 @@ def main():
       devnet_dir=devnet_dir,
       contracts_bedrock_dir=contracts_bedrock_dir,
       deployment_dir=deployment_dir,
+      forge_dump_path=forge_dump_path,
       l1_deployments_path=pjoin(deployment_dir, '.deploy'),
       deploy_config_dir=deploy_config_dir,
       devnet_config_path=devnet_config_path,
@@ -130,7 +133,7 @@ def deploy_contracts(paths):
     run_command([
         'cast', 'send', '--from', account,
         '--rpc-url', 'http://127.0.0.1:8545',
-        '--unlocked', '--value', '1ether', '0x3fAB184622Dc19b6109349B94811493BF2a45362'
+        '--unlocked', '--value', '5ether', '0x3fAB184622Dc19b6109349B94811493BF2a45362'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     # deploy the create2 deployer
@@ -143,16 +146,10 @@ def deploy_contracts(paths):
     run_command([
         'forge', 'script', fqn, '--sender', account,
         '--rpc-url', 'http://127.0.0.1:8545', '--broadcast',
-        '--unlocked'
+        '--unlocked', '--with-gas-price', '100000000000'
     ], env={}, cwd=paths.contracts_bedrock_dir)
 
     shutil.copy(paths.l1_deployments_path, paths.addresses_json_path)
-
-    log.info('Syncing contracts.')
-    run_command([
-        'forge', 'script', fqn, '--sig', 'sync()',
-        '--rpc-url', 'http://127.0.0.1:8545'
-    ], env={}, cwd=paths.contracts_bedrock_dir)
 
 def init_devnet_l1_deploy_config(paths, update_timestamp=False):
     deploy_config = read_json(paths.devnet_config_template_path)
@@ -164,27 +161,16 @@ def devnet_l1_genesis(paths):
     log.info('Generating L1 genesis state')
     init_devnet_l1_deploy_config(paths)
 
-    geth = subprocess.Popen([
-        'geth', '--dev', '--http', '--http.api', 'eth,debug',
-        '--verbosity', '4', '--gcmode', 'archive', '--dev.gaslimit', '30000000',
-        '--rpc.allow-unprotected-txs'
-    ])
+    fqn = 'scripts/Deploy.s.sol:Deploy'
+    run_command([
+        'forge', 'script', '--chain-id', '900', fqn, "--sig", "runWithStateDump()"
+    ], env={}, cwd=paths.contracts_bedrock_dir)
 
-    try:
-        forge = ChildProcess(deploy_contracts, paths)
-        forge.start()
-        forge.join()
-        err = forge.get_error()
-        if err:
-            raise Exception(f"Exception occurred in child process: {err}")
+    forge_dump = read_json(paths.forge_dump_path)
+    write_json(paths.allocs_path, { "accounts": forge_dump })
+    os.remove(paths.forge_dump_path)
 
-        res = debug_dumpBlock('127.0.0.1:8545')
-        response = json.loads(res)
-        allocs = response['result']
-
-        write_json(paths.allocs_path, allocs)
-    finally:
-        geth.terminate()
+    shutil.copy(paths.l1_deployments_path, paths.addresses_json_path)
 
 
 # Bring up the devnet where the contracts are deployed to L1
@@ -225,7 +211,7 @@ def devnet_deploy(paths):
             'go', 'run', 'cmd/main.go', 'genesis', 'l2',
             '--l1-rpc', 'http://localhost:8545',
             '--deploy-config', paths.devnet_config_path,
-            '--deployment-dir', paths.deployment_dir,
+            '--l1-deployments', paths.addresses_json_path,
             '--outfile.l2', paths.genesis_l2_path,
             '--outfile.rollup', paths.rollup_config_path
         ], cwd=paths.op_node_dir)
@@ -271,18 +257,8 @@ def eth_accounts(url):
     conn.close()
     return data
 
-
-def debug_dumpBlock(url):
-    log.info(f'Fetch debug_dumpBlock {url}')
-    conn = http.client.HTTPConnection(url)
-    headers = {'Content-type': 'application/json'}
-    body = '{"id":3, "jsonrpc":"2.0", "method": "debug_dumpBlock", "params":["latest"]}'
-    conn.request('POST', '/', body, headers)
-    response = conn.getresponse()
-    data = response.read().decode()
-    conn.close()
-    return data
-
+def pad_hex(input):
+    return '0x' + input.replace('0x', '').zfill(64)
 
 def wait_for_rpc_server(url):
     log.info(f'Waiting for RPC server at {url}')
@@ -310,12 +286,6 @@ CommandPreset = namedtuple('Command', ['name', 'args', 'cwd', 'timeout'])
 
 
 def devnet_test(paths):
-    # Check the L2 config
-    run_command(
-        ['go', 'run', 'cmd/check-l2/main.go', '--l2-rpc-url', 'http://localhost:9545', '--l1-rpc-url', 'http://localhost:8545'],
-        cwd=paths.ops_chain_ops,
-    )
-
     # Run the two commands with different signers, so the ethereum nonce management does not conflict
     # And do not use devnet system addresses, to avoid breaking fee-estimation or nonce values.
     run_commands([

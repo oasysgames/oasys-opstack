@@ -7,11 +7,16 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/ethereum-optimism/optimism/op-challenger/game/keccak"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/keccak/fetcher"
+	"github.com/ethereum-optimism/optimism/op-challenger/sender"
+	"github.com/ethereum-optimism/optimism/op-service/sources"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/claims"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/contracts"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/loader"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/registry"
@@ -23,7 +28,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/httputil"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum-optimism/optimism/op-service/sources/batching"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -36,15 +41,26 @@ type Service struct {
 
 	faultGamesCloser fault.CloseFunc
 
-	txMgr *txmgr.SimpleTxManager
+	preimages *keccak.LargePreimageScheduler
+
+	cl clock.Clock
+
+	txMgr    *txmgr.SimpleTxManager
+	txSender *sender.TxSender
 
 	loader *loader.GameLoader
+
+	claimer *claims.BondClaimScheduler
+
+	factoryContract *contracts.DisputeGameFactoryContract
+	registry        *registry.GameTypeRegistry
+	rollupClient    *sources.RollupClient
 
 	l1Client   *ethclient.Client
 	pollClient client.RPC
 
-	pprofSrv   *httputil.HTTPServer
-	metricsSrv *httputil.HTTPServer
+	pprofService *oppprof.Service
+	metricsSrv   *httputil.HTTPServer
 
 	balanceMetricer io.Closer
 
@@ -52,8 +68,9 @@ type Service struct {
 }
 
 // NewService creates a new Service.
-func NewService(ctx context.Context, logger log.Logger, cfg *config.Config) (*Service, error) {
+func NewService(ctx context.Context, cl clock.Clock, logger log.Logger, cfg *config.Config) (*Service, error) {
 	s := &Service{
+		cl:      cl,
 		logger:  logger,
 		metrics: metrics.NewMetrics(),
 	}
@@ -67,26 +84,41 @@ func NewService(ctx context.Context, logger log.Logger, cfg *config.Config) (*Se
 }
 
 func (s *Service) initFromConfig(ctx context.Context, cfg *config.Config) error {
-	if err := s.initTxManager(cfg); err != nil {
-		return err
+	if err := s.initTxManager(ctx, cfg); err != nil {
+		return fmt.Errorf("failed to init tx manager: %w", err)
 	}
 	if err := s.initL1Client(ctx, cfg); err != nil {
-		return err
+		return fmt.Errorf("failed to init l1 client: %w", err)
+	}
+	if err := s.initRollupClient(ctx, cfg); err != nil {
+		return fmt.Errorf("failed to init rollup client: %w", err)
 	}
 	if err := s.initPollClient(ctx, cfg); err != nil {
-		return err
+		return fmt.Errorf("failed to init poll client: %w", err)
 	}
-	if err := s.initPProfServer(&cfg.PprofConfig); err != nil {
-		return err
+	if err := s.initPProf(&cfg.PprofConfig); err != nil {
+		return fmt.Errorf("failed to init profiling: %w", err)
 	}
 	if err := s.initMetricsServer(&cfg.MetricsConfig); err != nil {
-		return err
+		return fmt.Errorf("failed to init metrics server: %w", err)
 	}
-	if err := s.initGameLoader(cfg); err != nil {
-		return err
+	if err := s.initFactoryContract(cfg); err != nil {
+		return fmt.Errorf("failed to create factory contract bindings: %w", err)
 	}
-	if err := s.initScheduler(ctx, cfg); err != nil {
-		return err
+	if err := s.initGameLoader(); err != nil {
+		return fmt.Errorf("failed to init game loader: %w", err)
+	}
+	if err := s.initBondClaims(cfg); err != nil {
+		return fmt.Errorf("failed to init bond claiming: %w", err)
+	}
+	if err := s.registerGameTypes(ctx, cfg); err != nil {
+		return fmt.Errorf("failed to register game types: %w", err)
+	}
+	if err := s.initScheduler(cfg); err != nil {
+		return fmt.Errorf("failed to init scheduler: %w", err)
+	}
+	if err := s.initLargePreimages(); err != nil {
+		return fmt.Errorf("failed to init large preimage scheduler: %w", err)
 	}
 
 	s.initMonitor(cfg)
@@ -96,12 +128,13 @@ func (s *Service) initFromConfig(ctx context.Context, cfg *config.Config) error 
 	return nil
 }
 
-func (s *Service) initTxManager(cfg *config.Config) error {
+func (s *Service) initTxManager(ctx context.Context, cfg *config.Config) error {
 	txMgr, err := txmgr.NewSimpleTxManager("challenger", s.logger, s.metrics, cfg.TxMgrConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create the transaction manager: %w", err)
 	}
 	s.txMgr = txMgr
+	s.txSender = sender.NewTxSender(ctx, s.logger, txMgr, cfg.MaxPendingTx)
 	return nil
 }
 
@@ -123,17 +156,20 @@ func (s *Service) initPollClient(ctx context.Context, cfg *config.Config) error 
 	return nil
 }
 
-func (s *Service) initPProfServer(cfg *oppprof.CLIConfig) error {
-	if !cfg.Enabled {
-		return nil
+func (s *Service) initPProf(cfg *oppprof.CLIConfig) error {
+	s.pprofService = oppprof.New(
+		cfg.ListenEnabled,
+		cfg.ListenAddr,
+		cfg.ListenPort,
+		cfg.ProfileType,
+		cfg.ProfileDir,
+		cfg.ProfileFilename,
+	)
+
+	if err := s.pprofService.Start(); err != nil {
+		return fmt.Errorf("failed to start pprof service: %w", err)
 	}
-	s.logger.Debug("starting pprof", "addr", cfg.ListenAddr, "port", cfg.ListenPort)
-	pprofSrv, err := oppprof.StartServer(cfg.ListenAddr, cfg.ListenPort)
-	if err != nil {
-		return fmt.Errorf("failed to start pprof server: %w", err)
-	}
-	s.pprofSrv = pprofSrv
-	s.logger.Info("started pprof server", "addr", pprofSrv.Addr())
+
 	return nil
 }
 
@@ -152,41 +188,78 @@ func (s *Service) initMetricsServer(cfg *opmetrics.CLIConfig) error {
 	}
 	s.logger.Info("started metrics server", "addr", metricsSrv.Addr())
 	s.metricsSrv = metricsSrv
-	s.balanceMetricer = s.metrics.StartBalanceMetrics(s.logger, s.l1Client, s.txMgr.From())
+	s.balanceMetricer = s.metrics.StartBalanceMetrics(s.logger, s.l1Client, s.txSender.From())
 	return nil
 }
 
-func (s *Service) initGameLoader(cfg *config.Config) error {
+func (s *Service) initFactoryContract(cfg *config.Config) error {
 	factoryContract, err := contracts.NewDisputeGameFactoryContract(cfg.GameFactoryAddress,
 		batching.NewMultiCaller(s.l1Client.Client(), batching.DefaultBatchSize))
 	if err != nil {
 		return fmt.Errorf("failed to bind the fault dispute game factory contract: %w", err)
 	}
-	s.loader = loader.NewGameLoader(factoryContract)
+	s.factoryContract = factoryContract
 	return nil
 }
 
-func (s *Service) initScheduler(ctx context.Context, cfg *config.Config) error {
+func (s *Service) initGameLoader() error {
+	s.loader = loader.NewGameLoader(s.factoryContract)
+	return nil
+}
+
+func (s *Service) initBondClaims(cfg *config.Config) error {
+	caller := batching.NewMultiCaller(s.l1Client.Client(), batching.DefaultBatchSize)
+	claimer := claims.NewBondClaimer(s.logger, s.metrics, caller, s.txSender)
+	s.claimer = claims.NewBondClaimScheduler(s.logger, s.metrics, claimer)
+	return nil
+}
+
+func (s *Service) initRollupClient(ctx context.Context, cfg *config.Config) error {
+	if cfg.RollupRpc == "" {
+		return nil
+	}
+	rollupClient, err := dial.DialRollupClientWithTimeout(ctx, dial.DefaultDialTimeout, s.logger, cfg.RollupRpc)
+	if err != nil {
+		return err
+	}
+	s.rollupClient = rollupClient
+	return nil
+}
+
+func (s *Service) registerGameTypes(ctx context.Context, cfg *config.Config) error {
 	gameTypeRegistry := registry.NewGameTypeRegistry()
-	closer, err := fault.RegisterGameTypes(gameTypeRegistry, ctx, s.logger, s.metrics, cfg, s.txMgr, s.l1Client)
+	caller := batching.NewMultiCaller(s.l1Client.Client(), batching.DefaultBatchSize)
+	closer, err := fault.RegisterGameTypes(gameTypeRegistry, ctx, s.cl, s.logger, s.metrics, cfg, s.rollupClient, s.txSender, s.factoryContract, caller)
 	if err != nil {
 		return err
 	}
 	s.faultGamesCloser = closer
+	s.registry = gameTypeRegistry
+	return nil
+}
 
+func (s *Service) initScheduler(cfg *config.Config) error {
 	disk := newDiskManager(cfg.Datadir)
-	s.sched = scheduler.NewScheduler(s.logger, s.metrics, disk, cfg.MaxConcurrency, gameTypeRegistry.CreatePlayer)
+	s.sched = scheduler.NewScheduler(s.logger, s.metrics, disk, cfg.MaxConcurrency, s.registry.CreatePlayer)
+	return nil
+}
+
+func (s *Service) initLargePreimages() error {
+	fetcher := fetcher.NewPreimageFetcher(s.logger, s.l1Client)
+	verifier := keccak.NewPreimageVerifier(s.logger, fetcher)
+	challenger := keccak.NewPreimageChallenger(s.logger, verifier, s.txSender)
+	s.preimages = keccak.NewLargePreimageScheduler(s.logger, s.registry.Oracles(), challenger)
 	return nil
 }
 
 func (s *Service) initMonitor(cfg *config.Config) {
-	cl := clock.SystemClock
-	s.monitor = newGameMonitor(s.logger, cl, s.loader, s.sched, cfg.GameWindow, s.l1Client.BlockNumber, cfg.GameAllowlist, s.pollClient)
+	s.monitor = newGameMonitor(s.logger, s.cl, s.loader, s.sched, s.preimages, cfg.GameWindow, s.claimer, s.l1Client.BlockNumber, cfg.GameAllowlist, s.pollClient)
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	s.logger.Info("starting scheduler")
 	s.sched.Start(ctx)
+	s.preimages.Start(ctx)
 	s.logger.Info("starting monitoring")
 	s.monitor.StartMonitoring()
 	s.logger.Info("challenger game service start completed")
@@ -212,8 +285,8 @@ func (s *Service) Stop(ctx context.Context) error {
 	if s.faultGamesCloser != nil {
 		s.faultGamesCloser()
 	}
-	if s.pprofSrv != nil {
-		if err := s.pprofSrv.Stop(ctx); err != nil {
+	if s.pprofService != nil {
+		if err := s.pprofService.Stop(ctx); err != nil {
 			result = errors.Join(result, fmt.Errorf("failed to close pprof server: %w", err))
 		}
 	}
@@ -227,6 +300,12 @@ func (s *Service) Stop(ctx context.Context) error {
 		s.txMgr.Close()
 	}
 
+	if s.rollupClient != nil {
+		s.rollupClient.Close()
+	}
+	if s.pollClient != nil {
+		s.pollClient.Close()
+	}
 	if s.l1Client != nil {
 		s.l1Client.Close()
 	}

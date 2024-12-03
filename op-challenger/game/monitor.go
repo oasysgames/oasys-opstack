@@ -27,7 +27,15 @@ type gameSource interface {
 }
 
 type gameScheduler interface {
-	Schedule([]types.GameMetadata) error
+	Schedule([]types.GameMetadata, uint64) error
+}
+
+type preimageScheduler interface {
+	Schedule(blockHash common.Hash, blockNumber uint64) error
+}
+
+type claimer interface {
+	Schedule(blockNumber uint64, games []types.GameMetadata) error
 }
 
 type gameMonitor struct {
@@ -35,7 +43,9 @@ type gameMonitor struct {
 	clock            clock.Clock
 	source           gameSource
 	scheduler        gameScheduler
+	preimages        preimageScheduler
 	gameWindow       time.Duration
+	claimer          claimer
 	fetchBlockNumber blockNumberFetcher
 	allowedGames     []common.Address
 	l1HeadsSub       ethereum.Subscription
@@ -60,7 +70,9 @@ func newGameMonitor(
 	cl clock.Clock,
 	source gameSource,
 	scheduler gameScheduler,
+	preimages preimageScheduler,
 	gameWindow time.Duration,
+	claimer claimer,
 	fetchBlockNumber blockNumberFetcher,
 	allowedGames []common.Address,
 	l1Source MinimalSubscriber,
@@ -69,8 +81,10 @@ func newGameMonitor(
 		logger:           logger,
 		clock:            cl,
 		scheduler:        scheduler,
+		preimages:        preimages,
 		source:           source,
 		gameWindow:       gameWindow,
+		claimer:          claimer,
 		fetchBlockNumber: fetchBlockNumber,
 		allowedGames:     allowedGames,
 		l1Source:         &headSource{inner: l1Source},
@@ -101,10 +115,13 @@ func (m *gameMonitor) minGameTimestamp() uint64 {
 	return 0
 }
 
-func (m *gameMonitor) progressGames(ctx context.Context, blockHash common.Hash) error {
+func (m *gameMonitor) progressGames(ctx context.Context, blockHash common.Hash, blockNumber uint64) error {
 	games, err := m.source.FetchAllGamesAtBlock(ctx, m.minGameTimestamp(), blockHash)
 	if err != nil {
 		return fmt.Errorf("failed to load games: %w", err)
+	}
+	if err := m.claimer.Schedule(blockNumber, games); err != nil {
+		return fmt.Errorf("failed to schedule bond claims: %w", err)
 	}
 	var gamesToPlay []types.GameMetadata
 	for _, game := range games {
@@ -114,7 +131,7 @@ func (m *gameMonitor) progressGames(ctx context.Context, blockHash common.Hash) 
 		}
 		gamesToPlay = append(gamesToPlay, game)
 	}
-	if err := m.scheduler.Schedule(gamesToPlay); errors.Is(err, scheduler.ErrBusy) {
+	if err := m.scheduler.Schedule(gamesToPlay, blockNumber); errors.Is(err, scheduler.ErrBusy) {
 		m.logger.Info("Scheduler still busy with previous update")
 	} else if err != nil {
 		return fmt.Errorf("failed to schedule games: %w", err)
@@ -123,8 +140,11 @@ func (m *gameMonitor) progressGames(ctx context.Context, blockHash common.Hash) 
 }
 
 func (m *gameMonitor) onNewL1Head(ctx context.Context, sig eth.L1BlockRef) {
-	if err := m.progressGames(ctx, sig.Hash); err != nil {
+	if err := m.progressGames(ctx, sig.Hash, sig.Number); err != nil {
 		m.logger.Error("Failed to progress games", "err", err)
+	}
+	if err := m.preimages.Schedule(sig.Hash, sig.Number); err != nil {
+		m.logger.Error("Failed to validate large preimages", "err", err)
 	}
 }
 

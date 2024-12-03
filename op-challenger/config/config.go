@@ -11,7 +11,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-node/chaincfg"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -23,7 +23,6 @@ var (
 	ErrMissingCannonBin              = errors.New("missing cannon bin")
 	ErrMissingCannonServer           = errors.New("missing cannon server")
 	ErrMissingCannonAbsolutePreState = errors.New("missing cannon absolute pre-state")
-	ErrMissingAlphabetTrace          = errors.New("missing alphabet trace")
 	ErrMissingL1EthRPC               = errors.New("missing l1 eth rpc url")
 	ErrMissingGameFactoryAddress     = errors.New("missing game factory address")
 	ErrMissingCannonSnapshotFreq     = errors.New("missing cannon snapshot freq")
@@ -34,15 +33,13 @@ var (
 	ErrCannonNetworkAndL2Genesis     = errors.New("only specify one of network or l2 genesis path")
 	ErrCannonNetworkUnknown          = errors.New("unknown cannon network")
 	ErrMissingRollupRpc              = errors.New("missing rollup rpc url")
-	ErrCannonAndOutputCannonConflict = errors.New("trace types cannon and outputCannon cannot be enabled at the same time")
 )
 
 type TraceType string
 
 const (
-	TraceTypeAlphabet     TraceType = "alphabet"
-	TraceTypeCannon       TraceType = "cannon"
-	TraceTypeOutputCannon TraceType = "output_cannon"
+	TraceTypeAlphabet TraceType = "alphabet"
+	TraceTypeCannon   TraceType = "cannon"
 
 	// Mainnet games
 	CannonFaultGameID = 0
@@ -51,7 +48,7 @@ const (
 	AlphabetFaultGameID = 255
 )
 
-var TraceTypes = []TraceType{TraceTypeAlphabet, TraceTypeCannon, TraceTypeOutputCannon}
+var TraceTypes = []TraceType{TraceTypeAlphabet, TraceTypeCannon}
 
 // GameIdToString maps game IDs to their string representation.
 var GameIdToString = map[uint8]string{
@@ -93,27 +90,24 @@ const (
 	// DefaultGameWindow is the default maximum time duration in the past
 	// that the challenger will look for games to progress.
 	// The default value is 11 days, which is a 4 day resolution buffer
-	// plus the 7 day game finalization window.
-	DefaultGameWindow = time.Duration(11 * 24 * time.Hour)
+	// and bond claiming buffer plus the 7 day game finalization window.
+	DefaultGameWindow   = time.Duration(11 * 24 * time.Hour)
+	DefaultMaxPendingTx = 10
 )
 
 // Config is a well typed config that is parsed from the CLI params.
 // This also contains config options for auxiliary services.
 // It is used to initialize the challenger.
 type Config struct {
-	L1EthRpc                string           // L1 RPC Url
-	GameFactoryAddress      common.Address   // Address of the dispute game factory
-	GameAllowlist           []common.Address // Allowlist of fault game addresses
-	GameWindow              time.Duration    // Maximum time duration to look for games to progress
-	AgreeWithProposedOutput bool             // Temporary config if we agree or disagree with the posted output
-	Datadir                 string           // Data Directory
-	MaxConcurrency          uint             // Maximum number of threads to use when progressing games
-	PollInterval            time.Duration    // Polling interval for latest-block subscription when using an HTTP RPC provider
+	L1EthRpc           string           // L1 RPC Url
+	GameFactoryAddress common.Address   // Address of the dispute game factory
+	GameAllowlist      []common.Address // Allowlist of fault game addresses
+	GameWindow         time.Duration    // Maximum time duration to look for games to progress
+	Datadir            string           // Data Directory
+	MaxConcurrency     uint             // Maximum number of threads to use when progressing games
+	PollInterval       time.Duration    // Polling interval for latest-block subscription when using an HTTP RPC provider
 
 	TraceTypes []TraceType // Type of traces supported
-
-	// Specific to the alphabet trace provider
-	AlphabetTrace string // String for the AlphabetTraceProvider
 
 	// Specific to the output cannon trace type
 	RollupRpc string
@@ -129,6 +123,8 @@ type Config struct {
 	CannonSnapshotFreq     uint   // Frequency of snapshots to create when executing cannon (in VM instructions)
 	CannonInfoFreq         uint   // Frequency of cannon progress log messages (in VM instructions)
 
+	MaxPendingTx uint64 // Maximum number of pending transactions (0 == no limit)
+
 	TxMgrConfig   txmgr.CLIConfig
 	MetricsConfig opmetrics.CLIConfig
 	PprofConfig   oppprof.CLIConfig
@@ -137,7 +133,6 @@ type Config struct {
 func NewConfig(
 	gameFactoryAddress common.Address,
 	l1EthRpc string,
-	agreeWithProposedOutput bool,
 	datadir string,
 	supportedTraceTypes ...TraceType,
 ) Config {
@@ -147,9 +142,9 @@ func NewConfig(
 		MaxConcurrency:     uint(runtime.NumCPU()),
 		PollInterval:       DefaultPollInterval,
 
-		AgreeWithProposedOutput: agreeWithProposedOutput,
-
 		TraceTypes: supportedTraceTypes,
+
+		MaxPendingTx: DefaultMaxPendingTx,
 
 		TxMgrConfig:   txmgr.NewCLIConfig(l1EthRpc, txmgr.DefaultChallengerFlagValues),
 		MetricsConfig: opmetrics.DefaultCLIConfig(),
@@ -171,6 +166,9 @@ func (c Config) Check() error {
 	if c.L1EthRpc == "" {
 		return ErrMissingL1EthRPC
 	}
+	if c.RollupRpc == "" {
+		return ErrMissingRollupRpc
+	}
 	if c.GameFactoryAddress == (common.Address{}) {
 		return ErrMissingGameFactoryAddress
 	}
@@ -183,15 +181,7 @@ func (c Config) Check() error {
 	if c.MaxConcurrency == 0 {
 		return ErrMaxConcurrencyZero
 	}
-	if c.TraceTypeEnabled(TraceTypeOutputCannon) {
-		if c.RollupRpc == "" {
-			return ErrMissingRollupRpc
-		}
-	}
-	if c.TraceTypeEnabled(TraceTypeCannon) && c.TraceTypeEnabled(TraceTypeOutputCannon) {
-		return ErrCannonAndOutputCannonConflict
-	}
-	if c.TraceTypeEnabled(TraceTypeCannon) || c.TraceTypeEnabled(TraceTypeOutputCannon) {
+	if c.TraceTypeEnabled(TraceTypeCannon) {
 		if c.CannonBin == "" {
 			return ErrMissingCannonBin
 		}
@@ -228,9 +218,6 @@ func (c Config) Check() error {
 		if c.CannonInfoFreq == 0 {
 			return ErrMissingCannonInfoFreq
 		}
-	}
-	if c.TraceTypeEnabled(TraceTypeAlphabet) && c.AlphabetTrace == "" {
-		return ErrMissingAlphabetTrace
 	}
 	if err := c.TxMgrConfig.Check(); err != nil {
 		return err

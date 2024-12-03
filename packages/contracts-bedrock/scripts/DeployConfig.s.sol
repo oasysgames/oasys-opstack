@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.15;
 
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
@@ -15,7 +15,7 @@ contract DeployConfig is Script {
     string internal _json;
 
     address public finalSystemOwner;
-    address public portalGuardian;
+    address public superchainConfigGuardian;
     uint256 public l1ChainID;
     uint256 public l2ChainID;
     uint256 public l2BlockTime;
@@ -48,13 +48,18 @@ contract DeployConfig is Script {
     uint256 public eip1559Denominator;
     uint256 public eip1559Elasticity;
     uint256 public faultGameAbsolutePrestate;
+    uint256 public faultGameGenesisBlock;
+    bytes32 public faultGameGenesisOutputRoot;
     uint256 public faultGameMaxDepth;
+    uint256 public faultGameSplitDepth;
     uint256 public faultGameMaxDuration;
+    uint256 public preimageOracleMinProposalSize;
+    uint256 public preimageOracleChallengePeriod;
     uint256 public systemConfigStartBlock;
     uint256 public requiredProtocolVersion;
     uint256 public recommendedProtocolVersion;
 
-    constructor(string memory _path) {
+    function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
         try vm.readFile(_path) returns (string memory data) {
             _json = data;
@@ -64,7 +69,7 @@ contract DeployConfig is Script {
         }
 
         finalSystemOwner = stdJson.readAddress(_json, "$.finalSystemOwner");
-        portalGuardian = stdJson.readAddress(_json, "$.portalGuardian");
+        superchainConfigGuardian = stdJson.readAddress(_json, "$.superchainConfigGuardian");
         l1ChainID = stdJson.readUint(_json, "$.l1ChainID");
         l2ChainID = stdJson.readUint(_json, "$.l2ChainID");
         l2BlockTime = stdJson.readUint(_json, "$.l2BlockTime");
@@ -100,10 +105,19 @@ contract DeployConfig is Script {
         requiredProtocolVersion = stdJson.readUint(_json, "$.requiredProtocolVersion");
         recommendedProtocolVersion = stdJson.readUint(_json, "$.recommendedProtocolVersion");
 
-        if (block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet) {
+        if (
+            block.chainid == Chains.LocalDevnet || block.chainid == Chains.GethDevnet || block.chainid == Chains.Sepolia
+                || block.chainid == Chains.Goerli
+        ) {
             faultGameAbsolutePrestate = stdJson.readUint(_json, "$.faultGameAbsolutePrestate");
             faultGameMaxDepth = stdJson.readUint(_json, "$.faultGameMaxDepth");
+            faultGameSplitDepth = stdJson.readUint(_json, "$.faultGameSplitDepth");
             faultGameMaxDuration = stdJson.readUint(_json, "$.faultGameMaxDuration");
+            faultGameGenesisBlock = stdJson.readUint(_json, "$.faultGameGenesisBlock");
+            faultGameGenesisOutputRoot = stdJson.readBytes32(_json, "$.faultGameGenesisOutputRoot");
+
+            preimageOracleMinProposalSize = stdJson.readUint(_json, "$.preimageOracleMinProposalSize");
+            preimageOracleChallengePeriod = stdJson.readUint(_json, "$.preimageOracleChallengePeriod");
         }
     }
 

@@ -73,7 +73,7 @@ func buildSpanBatches(t *testing.T, parent *eth.L2BlockRef, singularBatches []*S
 	return spanBatches
 }
 
-func getSpanBatchTime(batchType int) *uint64 {
+func getDeltaTime(batchType int) *uint64 {
 	minTs := uint64(0)
 	if batchType == SpanBatchType {
 		return &minTs
@@ -86,7 +86,7 @@ func l1InfoDepositTx(t *testing.T, l1BlockNum uint64) hexutil.Bytes {
 		Number:  l1BlockNum,
 		BaseFee: big.NewInt(0),
 	}
-	infoData, err := l1Info.MarshalBinary()
+	infoData, err := l1Info.marshalBinaryBedrock()
 	require.NoError(t, err)
 	depositTx := &types.DepositTx{
 		Data: infoData,
@@ -96,15 +96,17 @@ func l1InfoDepositTx(t *testing.T, l1BlockNum uint64) hexutil.Bytes {
 	return txData
 }
 
-func singularBatchToPayload(t *testing.T, batch *SingularBatch, blockNumber uint64) eth.ExecutionPayload {
+func singularBatchToPayload(t *testing.T, batch *SingularBatch, blockNumber uint64) eth.ExecutionPayloadEnvelope {
 	txs := []hexutil.Bytes{l1InfoDepositTx(t, uint64(batch.EpochNum))}
 	txs = append(txs, batch.Transactions...)
-	return eth.ExecutionPayload{
-		BlockHash:    mockHash(batch.Timestamp, 2),
-		ParentHash:   batch.ParentHash,
-		BlockNumber:  hexutil.Uint64(blockNumber),
-		Timestamp:    hexutil.Uint64(batch.Timestamp),
-		Transactions: txs,
+	return eth.ExecutionPayloadEnvelope{
+		ExecutionPayload: &eth.ExecutionPayload{
+			BlockHash:    mockHash(batch.Timestamp, 2),
+			ParentHash:   batch.ParentHash,
+			BlockNumber:  hexutil.Uint64(blockNumber),
+			Timestamp:    hexutil.Uint64(batch.Timestamp),
+			Transactions: txs,
+		},
 	}
 }
 
@@ -182,7 +184,7 @@ func BatchQueueNewOrigin(t *testing.T, batchType int) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     2,
-		SpanBatchTime:     getSpanBatchTime(batchType),
+		DeltaTime:         getDeltaTime(batchType),
 	}
 
 	input := &fakeBatchQueueInput{
@@ -243,7 +245,7 @@ func BatchQueueEager(t *testing.T, batchType int) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     30,
-		SpanBatchTime:     getSpanBatchTime(batchType),
+		DeltaTime:         getDeltaTime(batchType),
 		L2ChainID:         chainId,
 	}
 
@@ -321,7 +323,7 @@ func BatchQueueInvalidInternalAdvance(t *testing.T, batchType int) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     2,
-		SpanBatchTime:     getSpanBatchTime(batchType),
+		DeltaTime:         getDeltaTime(batchType),
 		L2ChainID:         chainId,
 	}
 
@@ -440,7 +442,7 @@ func BatchQueueMissing(t *testing.T, batchType int) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     2,
-		SpanBatchTime:     getSpanBatchTime(batchType),
+		DeltaTime:         getDeltaTime(batchType),
 		L2ChainID:         chainId,
 	}
 
@@ -557,7 +559,7 @@ func BatchQueueAdvancedEpoch(t *testing.T, batchType int) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     30,
-		SpanBatchTime:     getSpanBatchTime(batchType),
+		DeltaTime:         getDeltaTime(batchType),
 		L2ChainID:         chainId,
 	}
 
@@ -644,7 +646,7 @@ func BatchQueueShuffle(t *testing.T, batchType int) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     30,
-		SpanBatchTime:     getSpanBatchTime(batchType),
+		DeltaTime:         getDeltaTime(batchType),
 		L2ChainID:         chainId,
 	}
 
@@ -742,7 +744,7 @@ func TestBatchQueueOverlappingSpanBatch(t *testing.T) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     30,
-		SpanBatchTime:     getSpanBatchTime(SpanBatchType),
+		DeltaTime:         getDeltaTime(SpanBatchType),
 		L2ChainID:         chainId,
 	}
 
@@ -847,7 +849,7 @@ func TestBatchQueueComplex(t *testing.T) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     30,
-		SpanBatchTime:     getSpanBatchTime(SpanBatchType),
+		DeltaTime:         getDeltaTime(SpanBatchType),
 		L2ChainID:         chainId,
 	}
 
@@ -965,7 +967,7 @@ func TestBatchQueueResetSpan(t *testing.T) {
 		BlockTime:         2,
 		MaxSequencerDrift: 600,
 		SeqWindowSize:     30,
-		SpanBatchTime:     getSpanBatchTime(SpanBatchType),
+		DeltaTime:         getDeltaTime(SpanBatchType),
 		L2ChainID:         chainId,
 	}
 

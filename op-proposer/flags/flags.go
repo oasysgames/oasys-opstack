@@ -9,7 +9,7 @@ import (
 	opservice "github.com/ethereum-optimism/optimism/op-service"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
-	oppprof "github.com/ethereum-optimism/optimism/op-service/pprof"
+	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	oprpc "github.com/ethereum-optimism/optimism/op-service/rpc"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -29,16 +29,16 @@ var (
 	}
 	RollupRpcFlag = &cli.StringFlag{
 		Name:    "rollup-rpc",
-		Usage:   "HTTP provider URL for the rollup node",
+		Usage:   "HTTP provider URL for the rollup node. A comma-separated list enables the active rollup provider.",
 		EnvVars: prefixEnvVars("ROLLUP_RPC"),
 	}
+
+	// Optional flags
 	L2OOAddressFlag = &cli.StringFlag{
 		Name:    "l2oo-address",
 		Usage:   "Address of the L2OutputOracle contract",
 		EnvVars: prefixEnvVars("L2OO_ADDRESS"),
 	}
-
-	// Optional flags
 	PollIntervalFlag = &cli.DurationFlag{
 		Name:    "poll-interval",
 		Usage:   "How frequently to poll L2 for new blocks",
@@ -56,6 +56,31 @@ var (
 		Value:   false,
 		EnvVars: prefixEnvVars("OMIT_L1_BLOCKHASH_IN_PROPOSALS"),
 	}
+	DisputeGameFactoryAddressFlag = &cli.StringFlag{
+		Name:    "dgf-address",
+		Usage:   "Address of the DisputeGameFactory contract",
+		EnvVars: prefixEnvVars("DGF_ADDRESS"),
+		Hidden:  true,
+	}
+	ProposalIntervalFlag = &cli.DurationFlag{
+		Name:    "proposal-interval",
+		Usage:   "Interval between submitting L2 output proposals when the DGFAddress is set",
+		EnvVars: prefixEnvVars("PROPOSAL_INTERVAL"),
+		Hidden:  true,
+	}
+	DisputeGameTypeFlag = &cli.UintFlag{
+		Name:    "dg-type",
+		Usage:   "Dispute game type to create via the configured DisputeGameFactory",
+		Value:   0,
+		EnvVars: prefixEnvVars("DG_TYPE"),
+		Hidden:  true,
+	}
+	ActiveSequencerCheckDurationFlag = &cli.DurationFlag{
+		Name:    "active-sequencer-check-duration",
+		Usage:   "The duration between checks to determine the active sequencer endpoint. ",
+		Value:   2 * time.Minute,
+		EnvVars: prefixEnvVars("ACTIVE_SEQUENCER_CHECK_DURATION"),
+	}
 	// Legacy Flags
 	L2OutputHDPathFlag = txmgr.L2OutputHDPathFlag
 )
@@ -63,14 +88,18 @@ var (
 var requiredFlags = []cli.Flag{
 	L1EthRpcFlag,
 	RollupRpcFlag,
-	L2OOAddressFlag,
 }
 
 var optionalFlags = []cli.Flag{
+	L2OOAddressFlag,
 	PollIntervalFlag,
 	AllowNonFinalizedFlag,
 	L2OutputHDPathFlag,
 	OmitL1BlockHashInProposalsFlag,
+	DisputeGameFactoryAddressFlag,
+	ProposalIntervalFlag,
+	DisputeGameTypeFlag,
+	ActiveSequencerCheckDurationFlag,
 }
 
 func init() {

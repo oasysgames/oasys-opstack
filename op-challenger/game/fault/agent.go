@@ -18,9 +18,9 @@ import (
 // For full op-challenger this means executing the transaction on chain.
 type Responder interface {
 	CallResolve(ctx context.Context) (gameTypes.GameStatus, error)
-	Resolve(ctx context.Context) error
+	Resolve() error
 	CallResolveClaim(ctx context.Context, claimIdx uint64) error
-	ResolveClaim(ctx context.Context, claimIdx uint64) error
+	ResolveClaim(claimIdx uint64) error
 	PerformAction(ctx context.Context, action types.Action) error
 }
 
@@ -29,24 +29,22 @@ type ClaimLoader interface {
 }
 
 type Agent struct {
-	metrics                 metrics.Metricer
-	solver                  *solver.GameSolver
-	loader                  ClaimLoader
-	responder               Responder
-	maxDepth                int
-	agreeWithProposedOutput bool
-	log                     log.Logger
+	metrics   metrics.Metricer
+	solver    *solver.GameSolver
+	loader    ClaimLoader
+	responder Responder
+	maxDepth  types.Depth
+	log       log.Logger
 }
 
-func NewAgent(m metrics.Metricer, loader ClaimLoader, maxDepth int, trace types.TraceAccessor, responder Responder, agreeWithProposedOutput bool, log log.Logger) *Agent {
+func NewAgent(m metrics.Metricer, loader ClaimLoader, maxDepth types.Depth, trace types.TraceAccessor, responder Responder, log log.Logger) *Agent {
 	return &Agent{
-		metrics:                 m,
-		solver:                  solver.NewGameSolver(maxDepth, trace),
-		loader:                  loader,
-		responder:               responder,
-		maxDepth:                maxDepth,
-		agreeWithProposedOutput: agreeWithProposedOutput,
-		log:                     log,
+		metrics:   m,
+		solver:    solver.NewGameSolver(maxDepth, trace),
+		loader:    loader,
+		responder: responder,
+		maxDepth:  maxDepth,
+		log:       log,
 	}
 }
 
@@ -70,7 +68,9 @@ func (a *Agent) Act(ctx context.Context) error {
 	for _, action := range actions {
 		log := a.log.New("action", action.Type, "is_attack", action.IsAttack, "parent", action.ParentIdx)
 		if action.Type == types.ActionTypeStep {
-			log = log.New("prestate", common.Bytes2Hex(action.PreState), "proof", common.Bytes2Hex(action.ProofData))
+			containsOracleData := action.OracleData != nil
+			isLocal := containsOracleData && action.OracleData.IsLocal
+			log = log.New("prestate", common.Bytes2Hex(action.PreState), "proof", common.Bytes2Hex(action.ProofData), "containsOracleData", containsOracleData, "isLocalPreimage", isLocal)
 		} else {
 			log = log.New("value", action.Value)
 		}
@@ -90,19 +90,6 @@ func (a *Agent) Act(ctx context.Context) error {
 	return nil
 }
 
-// shouldResolve returns true if the agent should resolve the game.
-// This method will return false if the game is still in progress.
-func (a *Agent) shouldResolve(status gameTypes.GameStatus) bool {
-	expected := gameTypes.GameStatusDefenderWon
-	if a.agreeWithProposedOutput {
-		expected = gameTypes.GameStatusChallengerWon
-	}
-	if expected != status {
-		a.log.Warn("Game will be lost", "expected", expected, "actual", status)
-	}
-	return expected == status
-}
-
 // tryResolve resolves the game if it is in a winning state
 // Returns true if the game is resolvable (regardless of whether it was actually resolved)
 func (a *Agent) tryResolve(ctx context.Context) bool {
@@ -114,11 +101,8 @@ func (a *Agent) tryResolve(ctx context.Context) bool {
 	if err != nil || status == gameTypes.GameStatusInProgress {
 		return false
 	}
-	if !a.shouldResolve(status) {
-		return true
-	}
 	a.log.Info("Resolving game")
-	if err := a.responder.Resolve(ctx); err != nil {
+	if err := a.responder.Resolve(); err != nil {
 		a.log.Error("Failed to resolve the game", "err", err)
 	}
 	return true
@@ -137,7 +121,7 @@ func (a *Agent) tryResolveClaims(ctx context.Context) error {
 
 	var resolvableClaims []int64
 	for _, claim := range claims {
-		a.log.Debug("checking if claim is resolvable", "claimIdx", claim.ContractIndex)
+		a.log.Trace("Checking if claim is resolvable", "claimIdx", claim.ContractIndex)
 		if err := a.responder.CallResolveClaim(ctx, uint64(claim.ContractIndex)); err == nil {
 			a.log.Info("Resolving claim", "claimIdx", claim.ContractIndex)
 			resolvableClaims = append(resolvableClaims, int64(claim.ContractIndex))
@@ -154,7 +138,7 @@ func (a *Agent) tryResolveClaims(ctx context.Context) error {
 		claimIdx := claimIdx
 		go func() {
 			defer wg.Done()
-			err := a.responder.ResolveClaim(ctx, uint64(claimIdx))
+			err := a.responder.ResolveClaim(uint64(claimIdx))
 			if err != nil {
 				a.log.Error("Failed to resolve claim", "err", err)
 			}
@@ -187,6 +171,6 @@ func (a *Agent) newGameFromContracts(ctx context.Context) (types.Game, error) {
 	if len(claims) == 0 {
 		return nil, errors.New("no claims")
 	}
-	game := types.NewGameState(a.agreeWithProposedOutput, claims, uint64(a.maxDepth))
+	game := types.NewGameState(claims, a.maxDepth)
 	return game, nil
 }

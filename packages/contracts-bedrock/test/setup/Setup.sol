@@ -30,6 +30,7 @@ import { L1ERC721Bridge } from "src/L1/L1ERC721Bridge.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Vm } from "forge-std/Vm.sol";
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 
 /// @title Setup
 /// @dev This contact is responsible for setting up the contracts in state. It currently
@@ -37,9 +38,12 @@ import { Vm } from "forge-std/Vm.sol";
 ///      up behind proxies. In the future we will migrate to importing the genesis JSON
 ///      file that is created to set up the L2 contracts instead of setting them up manually.
 contract Setup {
+    /// @notice The address of the foundry Vm contract.
     Vm private constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
 
-    Deploy internal deploy;
+    /// @notice The address of the Deploy contract. Set into state with `etch` to avoid
+    ///         mutating any nonces. MUST not have constructor logic.
+    Deploy internal constant deploy = Deploy(address(uint160(uint256(keccak256(abi.encode("optimism.deploy"))))));
 
     OptimismPortal optimismPortal;
     L2OutputOracle l2OutputOracle;
@@ -50,6 +54,7 @@ contract Setup {
     L1ERC721Bridge l1ERC721Bridge;
     OptimismMintableERC20Factory l1OptimismMintableERC20Factory;
     ProtocolVersions protocolVersions;
+    SuperchainConfig superchainConfig;
 
     L2CrossDomainMessenger l2CrossDomainMessenger =
         L2CrossDomainMessenger(payable(Predeploys.L2_CROSS_DOMAIN_MESSENGER));
@@ -74,16 +79,9 @@ contract Setup {
     ///      will also need to include the bytecode for the Deploy contract.
     ///      This is a hack as we are pushing solidity to the edge.
     function setUp() public virtual {
-        deploy = Deploy(_create(vm.getCode("Deploy.s.sol:Deploy")));
+        vm.etch(address(deploy), vm.getDeployedCode("Deploy.s.sol:Deploy"));
+        vm.allowCheatcodes(address(deploy));
         deploy.setUp();
-    }
-
-    /// @dev Simple wrapper around the `create` opcode
-    function _create(bytes memory _code) internal returns (address addr_) {
-        assembly {
-            addr_ := create(0, add(_code, 0x20), mload(_code))
-        }
-        require(addr_ != address(0), "Setup: cannot create");
     }
 
     /// @dev Sets up the L1 contracts.
@@ -106,6 +104,7 @@ contract Setup {
         l1OptimismMintableERC20Factory =
             OptimismMintableERC20Factory(deploy.mustGetAddress("OptimismMintableERC20FactoryProxy"));
         protocolVersions = ProtocolVersions(deploy.mustGetAddress("ProtocolVersionsProxy"));
+        superchainConfig = SuperchainConfig(deploy.mustGetAddress("SuperchainConfigProxy"));
 
         vm.label(address(l2OutputOracle), "L2OutputOracle");
         vm.label(deploy.mustGetAddress("L2OutputOracleProxy"), "L2OutputOracleProxy");
@@ -124,22 +123,31 @@ contract Setup {
         vm.label(deploy.mustGetAddress("OptimismMintableERC20FactoryProxy"), "OptimismMintableERC20FactoryProxy");
         vm.label(address(protocolVersions), "ProtocolVersions");
         vm.label(deploy.mustGetAddress("ProtocolVersionsProxy"), "ProtocolVersionsProxy");
+        vm.label(address(superchainConfig), "SuperchainConfig");
+        vm.label(deploy.mustGetAddress("SuperchainConfigProxy"), "SuperchainConfigProxy");
         vm.label(AddressAliasHelper.applyL1ToL2Alias(address(l1CrossDomainMessenger)), "L1CrossDomainMessenger_aliased");
     }
 
     /// @dev Sets up the L2 contracts. Depends on `L1()` being called first.
-    function L2(DeployConfig cfg) public {
-        string[] memory args = new string[](3);
-        args[0] = Executables.bash;
-        args[1] = "-c";
-        args[2] = string.concat(vm.projectRoot(), "/scripts/generate-l2-genesis.sh");
-        vm.ffi(args);
-
+    function L2() public {
         string memory allocsPath = string.concat(vm.projectRoot(), "/.testdata/genesis.json");
+        if (vm.isFile(allocsPath) == false) {
+            string[] memory args = new string[](3);
+            args[0] = Executables.bash;
+            args[1] = "-c";
+            args[2] = string.concat(vm.projectRoot(), "/scripts/generate-l2-genesis.sh");
+            vm.ffi(args);
+        }
+
+        // Prevent race condition where the genesis.json file is not yet created
+        while (vm.isFile(allocsPath) == false) {
+            vm.sleep(1);
+        }
+
         vm.loadAllocs(allocsPath);
 
         // Set the governance token's owner to be the final system owner
-        address finalSystemOwner = cfg.finalSystemOwner();
+        address finalSystemOwner = deploy.cfg().finalSystemOwner();
         vm.prank(governanceToken.owner());
         governanceToken.transferOwnership(finalSystemOwner);
 
