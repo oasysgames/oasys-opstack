@@ -515,6 +515,13 @@ contract L1UpgradeManager_Test is Test, IERC165 {
             assert(granite.messageRelayer() == messageRelayer);
         }
 
+        // Check if storage gaps are reserved in multiples of 50
+        {
+            bytes32 slot = bytes32(uint256(50 + 12 + 38)); // ResourceMetering(50) + OptimismPortal(12+38) = 100
+            bytes32 value = vm.load(builts.oasysPortal, slot);
+            assert(value == bytes32(uint256(uint160(messageRelayer))));
+        }
+
         // finalizedWithdrawals
         {
             bytes32 mapKey = bytes32("finalizedWithdrawals");
@@ -659,7 +666,8 @@ contract L1UpgradeManager_Test is Test, IERC165 {
         {
             bytes memory _calldata = abi.encodeWithSelector(BedrockOasysL2OutputOracle.nextVerifyIndex.selector);
 
-            bytes32 valueSlot = bytes32(uint256(1 + 49)); // Initializable(1) + L2OutputOracle(3+46)
+            // Also verify that storage gaps are reserved in multiples of 50
+            bytes32 valueSlot = bytes32(uint256(1 + 3 + 46)); // Initializable(1) + L2OutputOracle(3+46) = 50
 
             // set to 0
             vm.store(builts.oasysL2OutputOracle, valueSlot, bytes32(uint256(0)));
@@ -834,6 +842,15 @@ contract L1UpgradeManager_Test is Test, IERC165 {
             assert(address(granite.otherBridge()) == 0x6200000000000000000000000000000000000001);
             assert(address(granite.l2ERC721Bridge()) == 0x6200000000000000000000000000000000000001);
             assert(address(granite.superchainConfig()) == superchainConfigProxy);
+
+            // Check if storage gaps are reserved in multiples of 50
+            {
+                // NOTE: Incorrect slot calculation in official Optimism implementation
+                // OasysERC721BridgeLegacySpacer(50) + Initializable(2byte) + ERC721Bridge(30byte+2+46) = 99
+                bytes32 slot = bytes32(uint256(50 + 3 + 46));
+                bytes32 value = vm.load(builts.l1ERC721Bridge, slot);
+                assert(value == bytes32(uint256(uint160(superchainConfigProxy))));
+            }
         }
 
         // deposits / mapping(address => mapping(address => mapping(uint256 => bool)))
