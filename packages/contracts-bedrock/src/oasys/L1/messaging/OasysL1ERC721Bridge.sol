@@ -17,7 +17,7 @@ contract OasysL1ERC721Bridge is L1ERC721Bridge, ILegacyL1ERC721Bridge {
     /// @custom:legacy
     /// @inheritdoc ILegacyL1ERC721Bridge
     function l2ERC721Bridge() external view returns (address) {
-        return OTHER_BRIDGE;
+        return address(otherBridge);
     }
 
     /// @custom:legacy

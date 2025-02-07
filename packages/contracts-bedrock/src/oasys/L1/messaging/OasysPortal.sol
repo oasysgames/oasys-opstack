@@ -45,7 +45,7 @@ contract OasysPortal is OptimismPortal {
     /// @notice Set a new message relayer address.
     ///         If the zero address is set, no immediate relay of withdrawal messages.
     function setMessageRelayer(address newRelayer) external {
-        require(msg.sender == GUARDIAN, "OasysPortal: only guardian can set a new message relayer");
+        require(msg.sender == superchainConfig.guardian(), "OasysPortal: only guardian can set a new message relayer");
         require(newRelayer != messageRelayer, "OasysPortal: already set");
 
         messageRelayer = newRelayer;
@@ -80,7 +80,7 @@ contract OasysPortal is OptimismPortal {
             // Therefore, we wait based on the proven tx timestamp.
             // Ref: https://github.com/oasysgames/oasys-opstack/issues/118
             //slither-disable-next-line calls-inside-a-loop
-            uint256 verified = IOasysL2OutputOracle(address(L2_ORACLE)).verifiedL1Timestamp();
+            uint256 verified = IOasysL2OutputOracle(address(l2Oracle)).verifiedL1Timestamp();
             if (verified > _timestamp) {
                 return true;
             }

@@ -100,7 +100,7 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
 
     /// @inheritdoc L2OutputOracle
     function deleteL2Outputs(uint256 l2OutputIndex) external override {
-        require(msg.sender == CHALLENGER, "OasysL2OutputOracle: only the challenger address can delete outputs");
+        require(msg.sender == challenger, "OasysL2OutputOracle: only the challenger address can delete outputs");
 
         _deleteL2Outputs(l2OutputIndex);
     }
@@ -158,7 +158,7 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
             return true;
         }
         //slither-disable-next-line block-timestamp
-        if (block.timestamp - l2Outputs[l2OutputIndex].timestamp > FINALIZATION_PERIOD_SECONDS) {
+        if (block.timestamp - l2Outputs[l2OutputIndex].timestamp > finalizationPeriodSeconds) {
             return true;
         }
         return false;
