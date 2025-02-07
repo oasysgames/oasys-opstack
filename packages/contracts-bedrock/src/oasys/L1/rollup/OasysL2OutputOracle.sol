@@ -38,9 +38,7 @@ contract OasysL2OutputOracle is IOasysL2OutputOracle, L2OutputOracle {
         address _challenger,
         uint256 _finalizationPeriodSeconds,
         IOasysL2OutputOracleVerifier _l2OracleVerifier
-    )
-        public
-    {
+    ) public {
         super.initialize({
             _submissionInterval: _submissionInterval,
             _l2BlockTime: _l2BlockTime,
