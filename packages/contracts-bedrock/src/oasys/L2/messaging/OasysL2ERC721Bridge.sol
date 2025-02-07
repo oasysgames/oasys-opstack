@@ -15,11 +15,6 @@ import { IOptimismMintableERC721 } from "src/universal/IOptimismMintableERC721.s
 ///         the legacy L2ERC721Bridge implemented by Oasys to the official Optimism L2ERC721Bridge.
 ///         This bridge supports OptimismMintableERC721 and legacy L2StandardERC721.
 contract OasysL2ERC721Bridge is L2ERC721Bridge, ILegacyL2ERC721Bridge {
-    /// @notice Constructs the OasysL2ERC721Bridge contract.
-    /// @param _messenger   Address of the CrossDomainMessenger on this network.
-    /// @param _otherBridge Address of the ERC721 bridge on the other network.
-    constructor(address _messenger, address _otherBridge) L2ERC721Bridge(_messenger, _otherBridge) { }
-
     /// @custom:legacy
     /// @inheritdoc ILegacyL2ERC721Bridge
     /// @dev Ref:

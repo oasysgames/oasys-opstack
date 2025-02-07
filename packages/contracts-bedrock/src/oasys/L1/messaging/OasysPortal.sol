@@ -8,6 +8,7 @@ import { Hashing } from "src/libraries/Hashing.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOracle.sol";
 
 /// @custom:proxied
@@ -22,24 +23,15 @@ contract OasysPortal is OptimismPortal {
     /// @param relayer The address of the new message relayer.
     event MessageRelayerSet(address indexed relayer);
 
-    constructor(
-        L2OutputOracle _l2Oracle,
-        address _guardian,
-        bool _paused,
-        SystemConfig _systemConfig
-    )
-        OptimismPortal(_l2Oracle, _guardian, _paused, _systemConfig)
-    { }
-
-    /// @inheritdoc OptimismPortal
-    function initialize(bool _paused) public override {
-        super.initialize(_paused);
-    }
-
     /// @notice Initalize with setting messager relayer
-    function initializeWithRelayer(bool _paused, address _messageRelayer) public {
+    function initializeWithRelayer(
+        L2OutputOracle _l2Oracle,
+        SystemConfig _systemConfig,
+        SuperchainConfig _superchainConfig,
+        address _messageRelayer
+    ) public {
+        initialize({ _l2Oracle: _l2Oracle, _systemConfig: _systemConfig, _superchainConfig: _superchainConfig });
         messageRelayer = _messageRelayer;
-        initialize(_paused);
     }
 
     /// @notice Set a new message relayer address.

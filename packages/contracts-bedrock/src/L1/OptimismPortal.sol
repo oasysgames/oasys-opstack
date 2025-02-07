@@ -153,7 +153,6 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         SuperchainConfig _superchainConfig
     )
         public
-        virtual
         initializer
     {
         l2Oracle = _l2Oracle;
