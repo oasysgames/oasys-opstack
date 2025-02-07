@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	sw "github.com/ethereum-optimism/optimism/proxyd/pkg/avg-sliding-window"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -24,13 +25,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/xaionaro-go/weightedshuffle"
 	"golang.org/x/sync/semaphore"
-
-	sw "github.com/ethereum-optimism/optimism/proxyd/pkg/avg-sliding-window"
 )
 
 const (
 	JSONRPCVersion       = "2.0"
 	JSONRPCErrorInternal = -32000
+	notFoundRpcError     = -32601
 )
 
 var (
@@ -45,7 +45,7 @@ var (
 		HTTPErrorCode: 500,
 	}
 	ErrMethodNotWhitelisted = &RPCErr{
-		Code:          JSONRPCErrorInternal - 1,
+		Code:          notFoundRpcError,
 		Message:       "rpc method is not whitelisted",
 		HTTPErrorCode: 403,
 	}
@@ -284,6 +284,8 @@ type indexedReqRes struct {
 	req   *RPCReq
 	res   *RPCRes
 }
+
+const proxydHealthzMethod = "proxyd_healthz"
 
 const ConsensusGetReceiptsMethod = "consensus_getReceipts"
 

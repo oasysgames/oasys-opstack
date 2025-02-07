@@ -35,12 +35,10 @@ type Indexer struct {
 	l1Client node.EthClient
 	l2Client node.EthClient
 
-	// api server only really serves a /health endpoint here, but this may change in the future
-	apiServer *httputil.HTTPServer
-
-	metricsServer *httputil.HTTPServer
-
 	metricsRegistry *prometheus.Registry
+
+	apiServer     *httputil.HTTPServer
+	metricsServer *httputil.HTTPServer
 
 	L1ETL           *etl.L1ETL
 	L2ETL           *etl.L2ETL
@@ -82,6 +80,10 @@ func (ix *Indexer) Start(ctx context.Context) error {
 }
 
 func (ix *Indexer) Stop(ctx context.Context) error {
+	if ix.stopped.Load() {
+		return nil
+	}
+
 	var result error
 
 	if ix.L1ETL != nil {
@@ -130,9 +132,7 @@ func (ix *Indexer) Stop(ctx context.Context) error {
 	}
 
 	ix.stopped.Store(true)
-
 	ix.log.Info("indexer stopped")
-
 	return result
 }
 
@@ -191,10 +191,11 @@ func (ix *Indexer) initDB(ctx context.Context, cfg config.DBConfig) error {
 
 func (ix *Indexer) initL1ETL(chainConfig config.ChainConfig) error {
 	l1Cfg := etl.Config{
-		LoopIntervalMsec:  chainConfig.L1PollingInterval,
-		HeaderBufferSize:  chainConfig.L1HeaderBufferSize,
-		ConfirmationDepth: big.NewInt(int64(chainConfig.L1ConfirmationDepth)),
-		StartHeight:       big.NewInt(int64(chainConfig.L1StartingHeight)),
+		LoopIntervalMsec:               chainConfig.L1PollingInterval,
+		HeaderBufferSize:               chainConfig.L1HeaderBufferSize,
+		AllowedInactivityWindowSeconds: chainConfig.ETLAllowedInactivityWindowSeconds,
+		ConfirmationDepth:              big.NewInt(int64(chainConfig.L1ConfirmationDepth)),
+		StartHeight:                    big.NewInt(int64(chainConfig.L1StartingHeight)),
 	}
 	l1Etl, err := etl.NewL1ETL(l1Cfg, ix.log, ix.DB, etl.NewMetrics(ix.metricsRegistry, "l1"),
 		ix.l1Client, chainConfig.L1Contracts, ix.shutdown)
@@ -235,15 +236,20 @@ func (ix *Indexer) startHttpServer(ctx context.Context, cfg config.ServerConfig)
 	ix.log.Debug("starting http server...", "port", cfg.Port)
 
 	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 	r.Use(middleware.Heartbeat("/healthz"))
+
+	// needed so that the middlware gets invoked
+	r.Get("/", r.NotFoundHandler())
 
 	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	srv, err := httputil.StartHTTPServer(addr, r)
 	if err != nil {
 		return fmt.Errorf("http server failed to start: %w", err)
 	}
-	ix.apiServer = srv
+
 	ix.log.Info("http server started", "addr", srv.Addr())
+	ix.apiServer = srv
 	return nil
 }
 

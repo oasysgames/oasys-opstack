@@ -3,11 +3,17 @@ package fault
 import (
 	"context"
 	"errors"
+	"math/big"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace"
+	"github.com/ethereum-optimism/optimism/op-service/clock"
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching/rpcblock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/test"
@@ -18,62 +24,29 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 )
 
-// TestShouldResolve tests the resolution logic.
-func TestShouldResolve(t *testing.T) {
-	t.Run("AgreeWithProposedOutput", func(t *testing.T) {
-		agent, _, _ := setupTestAgent(t, true)
-		require.False(t, agent.shouldResolve(gameTypes.GameStatusDefenderWon))
-		require.True(t, agent.shouldResolve(gameTypes.GameStatusChallengerWon))
-		require.False(t, agent.shouldResolve(gameTypes.GameStatusInProgress))
-	})
-
-	t.Run("DisagreeWithProposedOutput", func(t *testing.T) {
-		agent, _, _ := setupTestAgent(t, false)
-		require.True(t, agent.shouldResolve(gameTypes.GameStatusDefenderWon))
-		require.False(t, agent.shouldResolve(gameTypes.GameStatusChallengerWon))
-		require.False(t, agent.shouldResolve(gameTypes.GameStatusInProgress))
-	})
-}
+var l1Time = time.UnixMilli(100)
 
 func TestDoNotMakeMovesWhenGameIsResolvable(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name                    string
-		agreeWithProposedOutput bool
-		callResolveStatus       gameTypes.GameStatus
-		shouldResolve           bool
+		name              string
+		callResolveStatus gameTypes.GameStatus
 	}{
 		{
-			name:                    "Agree_Losing",
-			agreeWithProposedOutput: true,
-			callResolveStatus:       gameTypes.GameStatusDefenderWon,
-			shouldResolve:           false,
+			name:              "DefenderWon",
+			callResolveStatus: gameTypes.GameStatusDefenderWon,
 		},
 		{
-			name:                    "Agree_Winning",
-			agreeWithProposedOutput: true,
-			callResolveStatus:       gameTypes.GameStatusChallengerWon,
-			shouldResolve:           true,
-		},
-		{
-			name:                    "Disagree_Losing",
-			agreeWithProposedOutput: false,
-			callResolveStatus:       gameTypes.GameStatusChallengerWon,
-			shouldResolve:           false,
-		},
-		{
-			name:                    "Disagree_Winning",
-			agreeWithProposedOutput: false,
-			callResolveStatus:       gameTypes.GameStatusDefenderWon,
-			shouldResolve:           true,
+			name:              "ChallengerWon",
+			callResolveStatus: gameTypes.GameStatusChallengerWon,
 		},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			agent, claimLoader, responder := setupTestAgent(t, test.agreeWithProposedOutput)
+			agent, claimLoader, responder := setupTestAgent(t)
 			responder.callResolveStatus = test.callResolveStatus
 
 			require.NoError(t, agent.Act(ctx))
@@ -81,25 +54,129 @@ func TestDoNotMakeMovesWhenGameIsResolvable(t *testing.T) {
 			require.Equal(t, 1, responder.callResolveCount, "should check if game is resolvable")
 			require.Equal(t, 1, claimLoader.callCount, "should fetch claims once for resolveClaim")
 
-			if test.shouldResolve {
-				require.EqualValues(t, 1, responder.resolveCount, "should resolve winning game")
-			} else {
-				require.Zero(t, responder.resolveCount, "should not resolve losing game")
-			}
+			require.EqualValues(t, 1, responder.resolveCount, "should resolve winning game")
 		})
 	}
 }
 
-func TestLoadClaimsWhenGameNotResolvable(t *testing.T) {
-	// Checks that if the game isn't resolvable, that the agent continues on to start checking claims
-	agent, claimLoader, responder := setupTestAgent(t, false)
+func TestDoNotMakeMovesWhenL2BlockNumberChallenged(t *testing.T) {
+	ctx := context.Background()
+
+	agent, claimLoader, responder := setupTestAgent(t)
+	claimLoader.blockNumChallenged = true
+
+	require.NoError(t, agent.Act(ctx))
+
+	require.Equal(t, 1, responder.callResolveCount, "should check if game is resolvable")
+	require.Equal(t, 1, claimLoader.callCount, "should fetch claims only once for resolveClaim")
+}
+
+func createClaimsWithClaimants(t *testing.T, d types.Depth) []types.Claim {
+	claimBuilder := test.NewClaimBuilder(t, d, alphabet.NewTraceProvider(big.NewInt(0), d))
+	rootClaim := claimBuilder.CreateRootClaim()
+	claim1 := rootClaim
+	claim1.Claimant = common.BigToAddress(big.NewInt(1))
+	claim2 := claimBuilder.AttackClaim(claim1)
+	claim2.Claimant = common.BigToAddress(big.NewInt(2))
+	claim3 := claimBuilder.AttackClaim(claim2)
+	claim3.Claimant = common.BigToAddress(big.NewInt(3))
+	return []types.Claim{claim1, claim2, claim3}
+}
+
+func TestAgent_SelectiveClaimResolution(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name                 string
+		callResolveStatus    gameTypes.GameStatus
+		selective            bool
+		claimants            []common.Address
+		claims               []types.Claim
+		expectedResolveCount int
+	}{
+		{
+			name:                 "NonSelectiveEmptyClaimants",
+			callResolveStatus:    gameTypes.GameStatusDefenderWon,
+			selective:            false,
+			claimants:            []common.Address{},
+			claims:               createClaimsWithClaimants(t, types.Depth(4)),
+			expectedResolveCount: 3,
+		},
+		{
+			name:                 "NonSelectiveWithClaimants",
+			callResolveStatus:    gameTypes.GameStatusDefenderWon,
+			selective:            false,
+			claimants:            []common.Address{common.BigToAddress(big.NewInt(1))},
+			claims:               createClaimsWithClaimants(t, types.Depth(4)),
+			expectedResolveCount: 3,
+		},
+		{
+			name:              "SelectiveEmptyClaimants",
+			callResolveStatus: gameTypes.GameStatusDefenderWon,
+			selective:         true,
+			claimants:         []common.Address{},
+			claims:            createClaimsWithClaimants(t, types.Depth(4)),
+		},
+		{
+			name:                 "SelectiveWithClaimants",
+			callResolveStatus:    gameTypes.GameStatusDefenderWon,
+			selective:            true,
+			claimants:            []common.Address{common.BigToAddress(big.NewInt(1))},
+			claims:               createClaimsWithClaimants(t, types.Depth(4)),
+			expectedResolveCount: 1,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			agent, claimLoader, responder := setupTestAgent(t)
+			agent.selective = test.selective
+			agent.claimants = test.claimants
+			claimLoader.maxLoads = 1
+			claimLoader.claims = test.claims
+			responder.callResolveStatus = test.callResolveStatus
+
+			require.NoError(t, agent.Act(ctx))
+
+			require.Equal(t, test.expectedResolveCount, responder.callResolveClaimCount, "should check if game is resolvable")
+			require.Equal(t, test.expectedResolveCount, responder.resolveClaimCount, "should check if game is resolvable")
+		})
+	}
+}
+
+func TestSkipAttemptingToResolveClaimsWhenClockNotExpired(t *testing.T) {
+	agent, claimLoader, responder := setupTestAgent(t)
 	responder.callResolveErr = errors.New("game is not resolvable")
 	responder.callResolveClaimErr = errors.New("claim is not resolvable")
-	depth := 4
-	claimBuilder := test.NewClaimBuilder(t, depth, alphabet.NewTraceProvider("abcdefg", uint64(depth)))
+	depth := types.Depth(4)
+	claimBuilder := test.NewClaimBuilder(t, depth, alphabet.NewTraceProvider(big.NewInt(0), depth))
+
+	rootTime := l1Time.Add(-agent.maxClockDuration - 5*time.Minute)
+	gameBuilder := claimBuilder.GameBuilder(test.WithClock(rootTime, 0))
+	gameBuilder.Seq().
+		Attack(test.WithClock(rootTime.Add(5*time.Minute), 5*time.Minute)).
+		Defend(test.WithClock(rootTime.Add(7*time.Minute), 2*time.Minute)).
+		Attack(test.WithClock(rootTime.Add(11*time.Minute), 4*time.Minute))
+	claimLoader.claims = gameBuilder.Game.Claims()
+
+	require.NoError(t, agent.Act(context.Background()))
+
+	// Currently tries to resolve the first two claims because their clock's have expired, but doesn't detect that
+	// they have unresolvable children.
+	require.Equal(t, 2, responder.callResolveClaimCount)
+}
+
+func TestLoadClaimsWhenGameNotResolvable(t *testing.T) {
+	// Checks that if the game isn't resolvable, that the agent continues on to start checking claims
+	agent, claimLoader, responder := setupTestAgent(t)
+	responder.callResolveErr = errors.New("game is not resolvable")
+	responder.callResolveClaimErr = errors.New("claim is not resolvable")
+	depth := types.Depth(4)
+	claimBuilder := test.NewClaimBuilder(t, depth, alphabet.NewTraceProvider(big.NewInt(0), depth))
 
 	claimLoader.claims = []types.Claim{
-		claimBuilder.CreateRootClaim(true),
+		claimBuilder.CreateRootClaim(),
 	}
 
 	require.NoError(t, agent.Act(context.Background()))
@@ -109,27 +186,40 @@ func TestLoadClaimsWhenGameNotResolvable(t *testing.T) {
 	require.Zero(t, responder.resolveClaimCount, "should not send resolveClaim")
 }
 
-func setupTestAgent(t *testing.T, agreeWithProposedOutput bool) (*Agent, *stubClaimLoader, *stubResponder) {
-	logger := testlog.Logger(t, log.LvlInfo)
+func setupTestAgent(t *testing.T) (*Agent, *stubClaimLoader, *stubResponder) {
+	logger := testlog.Logger(t, log.LevelInfo)
 	claimLoader := &stubClaimLoader{}
-	depth := 4
-	provider := alphabet.NewTraceProvider("abcd", uint64(depth))
+	depth := types.Depth(4)
+	gameDuration := 3 * time.Minute
+	provider := alphabet.NewTraceProvider(big.NewInt(0), depth)
 	responder := &stubResponder{}
-	agent := NewAgent(metrics.NoopMetrics, claimLoader, depth, trace.NewSimpleTraceAccessor(provider), responder, agreeWithProposedOutput, logger)
+	systemClock := clock.NewDeterministicClock(time.UnixMilli(120200))
+	l1Clock := clock.NewDeterministicClock(l1Time)
+	agent := NewAgent(metrics.NoopMetrics, systemClock, l1Clock, claimLoader, depth, gameDuration, trace.NewSimpleTraceAccessor(provider), responder, logger, false, []common.Address{})
 	return agent, claimLoader, responder
 }
 
 type stubClaimLoader struct {
-	callCount int
-	claims    []types.Claim
+	callCount          int
+	maxLoads           int
+	claims             []types.Claim
+	blockNumChallenged bool
 }
 
-func (s *stubClaimLoader) GetAllClaims(ctx context.Context) ([]types.Claim, error) {
+func (s *stubClaimLoader) IsL2BlockNumberChallenged(_ context.Context, _ rpcblock.Block) (bool, error) {
+	return s.blockNumChallenged, nil
+}
+
+func (s *stubClaimLoader) GetAllClaims(_ context.Context, _ rpcblock.Block) ([]types.Claim, error) {
 	s.callCount++
+	if s.callCount > s.maxLoads && s.maxLoads != 0 {
+		return []types.Claim{}, nil
+	}
 	return s.claims, nil
 }
 
 type stubResponder struct {
+	l                 sync.Mutex
 	callResolveCount  int
 	callResolveStatus gameTypes.GameStatus
 	callResolveErr    error
@@ -142,26 +232,34 @@ type stubResponder struct {
 	resolveClaimCount     int
 }
 
-func (s *stubResponder) CallResolve(ctx context.Context) (gameTypes.GameStatus, error) {
+func (s *stubResponder) CallResolve(_ context.Context) (gameTypes.GameStatus, error) {
+	s.l.Lock()
+	defer s.l.Unlock()
 	s.callResolveCount++
 	return s.callResolveStatus, s.callResolveErr
 }
 
-func (s *stubResponder) Resolve(ctx context.Context) error {
+func (s *stubResponder) Resolve() error {
+	s.l.Lock()
+	defer s.l.Unlock()
 	s.resolveCount++
 	return s.resolveErr
 }
 
-func (s *stubResponder) CallResolveClaim(ctx context.Context, clainIdx uint64) error {
+func (s *stubResponder) CallResolveClaim(_ context.Context, _ uint64) error {
+	s.l.Lock()
+	defer s.l.Unlock()
 	s.callResolveClaimCount++
 	return s.callResolveClaimErr
 }
 
-func (s *stubResponder) ResolveClaim(ctx context.Context, clainIdx uint64) error {
-	s.resolveClaimCount++
+func (s *stubResponder) ResolveClaims(claims ...uint64) error {
+	s.l.Lock()
+	defer s.l.Unlock()
+	s.resolveClaimCount += len(claims)
 	return nil
 }
 
-func (s *stubResponder) PerformAction(ctx context.Context, response types.Action) error {
+func (s *stubResponder) PerformAction(_ context.Context, _ types.Action) error {
 	return nil
 }

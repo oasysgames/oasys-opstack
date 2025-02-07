@@ -2,25 +2,29 @@
 pragma solidity 0.8.15;
 
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
+import { StandardBridge } from "src/universal/StandardBridge.sol";
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import { OasysERC721BridgeLegacySpacer } from "src/oasys/L1/messaging/OasysERC721BridgeLegacySpacer.sol";
 
 /// @title ERC721Bridge
 /// @notice ERC721Bridge is a base contract for the L1 and L2 ERC721 bridges.
-abstract contract ERC721Bridge is OasysERC721BridgeLegacySpacer {
-    /// @notice Messenger contract on this domain. This will be removed in the
-    ///         future, use `messenger` instead.
-    /// @custom:legacy
-    CrossDomainMessenger public immutable MESSENGER;
+abstract contract ERC721Bridge is OasysERC721BridgeLegacySpacer, Initializable {
+    /// @custom:spacer ERC721Bridge's initializer slot spacing
+    /// @notice Spacer to avoid packing into the initializer slot
+    bytes30 private spacer_0_2_30;
 
-    /// @notice Address of the bridge on the other network. This will be removed in the
-    ///         future, use `otherBridge` instead.
-    /// @custom:legacy
-    address public immutable OTHER_BRIDGE;
+    /// @notice Messenger contract on this domain.
+    /// @custom:network-specific
+    CrossDomainMessenger public messenger;
+
+    /// @notice Contract of the bridge on the other network.
+    /// @custom:network-specific
+    StandardBridge public otherBridge;
 
     /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
-    uint256[49] private __gap;
+    uint256[46] private __gap;
 
     /// @notice Emitted when an ERC721 bridge to the other network is initiated.
     /// @param localToken  Address of the token on this domain.
@@ -57,32 +61,48 @@ abstract contract ERC721Bridge is OasysERC721BridgeLegacySpacer {
     /// @notice Ensures that the caller is a cross-chain message from the other bridge.
     modifier onlyOtherBridge() {
         require(
-            msg.sender == address(MESSENGER) && MESSENGER.xDomainMessageSender() == OTHER_BRIDGE,
+            msg.sender == address(messenger) && messenger.xDomainMessageSender() == address(otherBridge),
             "ERC721Bridge: function can only be called from the other bridge"
         );
         _;
     }
 
-    /// @param _messenger   Address of the CrossDomainMessenger on this network.
-    /// @param _otherBridge Address of the ERC721 bridge on the other network.
-    constructor(address _messenger, address _otherBridge) {
-        require(_messenger != address(0), "ERC721Bridge: messenger cannot be address(0)");
-        require(_otherBridge != address(0), "ERC721Bridge: other bridge cannot be address(0)");
-
-        MESSENGER = CrossDomainMessenger(_messenger);
-        OTHER_BRIDGE = _otherBridge;
+    /// @notice Initializer.
+    /// @param _messenger   Contract of the CrossDomainMessenger on this network.
+    /// @param _otherBridge Contract of the ERC721 bridge on the other network.
+    function __ERC721Bridge_init(
+        CrossDomainMessenger _messenger,
+        StandardBridge _otherBridge
+    )
+        internal
+        onlyInitializing
+    {
+        messenger = _messenger;
+        otherBridge = _otherBridge;
     }
 
     /// @notice Legacy getter for messenger contract.
+    ///         Public getter is legacy and will be removed in the future. Use `messenger` instead.
     /// @return Messenger contract on this domain.
-    function messenger() external view returns (CrossDomainMessenger) {
-        return MESSENGER;
+    /// @custom:legacy
+    function MESSENGER() external view returns (CrossDomainMessenger) {
+        return messenger;
     }
 
     /// @notice Legacy getter for other bridge address.
-    /// @return Address of the bridge on the other network.
-    function otherBridge() external view returns (address) {
-        return OTHER_BRIDGE;
+    ///         Public getter is legacy and will be removed in the future. Use `otherBridge` instead.
+    /// @return Contract of the bridge on the other network.
+    /// @custom:legacy
+    function OTHER_BRIDGE() external view returns (StandardBridge) {
+        return otherBridge;
+    }
+
+    /// @notice This function should return true if the contract is paused.
+    ///         On L1 this function will check the SuperchainConfig for its paused status.
+    ///         On L2 this function should be a no-op.
+    /// @return Whether or not the contract is paused.
+    function paused() public view virtual returns (bool) {
+        return false;
     }
 
     /// @notice Initiates a bridge of an NFT to the caller's account on the other chain. Note that

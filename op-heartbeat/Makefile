@@ -1,6 +1,6 @@
 GITCOMMIT ?= $(shell git rev-parse HEAD)
 GITDATE ?= $(shell git show -s --format='%ct')
-VERSION := v0.0.0
+VERSION ?= v0.0.0
 
 LDFLAGSSTRING +=-X main.GitCommit=$(GITCOMMIT)
 LDFLAGSSTRING +=-X main.GitDate=$(GITDATE)
@@ -19,5 +19,4 @@ test:
 .PHONY: \
 	clean \
 	op-heartbeat \
-	test \
-	lint
+	test

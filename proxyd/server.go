@@ -42,6 +42,7 @@ const (
 	defaultWSHandshakeTimeout    = 10 * time.Second
 	defaultWSReadTimeout         = 2 * time.Minute
 	defaultWSWriteTimeout        = 10 * time.Second
+	defaultCacheTtl              = 1 * time.Hour
 	maxRequestBodyLogLen         = 2000
 	defaultMaxUpstreamBatchSize  = 10
 	defaultRateLimitHeader       = "X-Forwarded-For"
@@ -155,11 +156,7 @@ func NewServer(
 	overrideLims := make(map[string]FrontendRateLimiter)
 	globalMethodLims := make(map[string]bool)
 	for method, override := range rateLimitConfig.MethodOverrides {
-		var err error
 		overrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, method)
-		if err != nil {
-			return nil, err
-		}
 
 		if override.Global {
 			globalMethodLims[method] = true
@@ -435,6 +432,16 @@ func (s *Server) handleBatchRPC(ctx context.Context, reqs []json.RawMessage, isL
 			continue
 		}
 
+		// Simple health check
+		if len(reqs) == 1 && parsedReq.Method == proxydHealthzMethod {
+			res := &RPCRes{
+				ID:      parsedReq.ID,
+				JSONRPC: JSONRPCVersion,
+				Result:  "OK",
+			}
+			return []*RPCRes{res}, false, "", nil
+		}
+
 		if err := ValidateRPCReq(parsedReq); err != nil {
 			RecordRPCError(ctx, BackendProxyd, MethodUnknown, err)
 			responses[i] = NewRPCErrorRes(nil, err)
@@ -677,7 +684,7 @@ func (s *Server) isGlobalLimit(method string) bool {
 func (s *Server) rateLimitSender(ctx context.Context, req *RPCReq) error {
 	var params []string
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		log.Debug("error unmarshaling raw transaction params", "err", err, "req_Id", GetReqID(ctx))
+		log.Debug("error unmarshalling raw transaction params", "err", err, "req_Id", GetReqID(ctx))
 		return ErrParseErr
 	}
 

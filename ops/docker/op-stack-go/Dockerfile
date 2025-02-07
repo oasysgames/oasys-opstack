@@ -1,4 +1,9 @@
 # automatically set by buildkit, can be changed with --platform flag
+# see https://docs.docker.com/engine/reference/builder/#automatic-platform-args-in-the-global-scope
+# TARGETOS
+# TARGETARCH
+# TARGETPLATFORM
+# BUILDPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -34,10 +39,16 @@ ARG GIT_COMMIT
 ARG GIT_DATE
 
 # separate docker-builds:
-# - op-exporter
 # - op-ufm
 # - proxyd
 # - any JS/TS/smart-contract builds
+
+# TODO: if the build involves optional CGO, then:
+# 1) we may have to disable CGO explicitly
+# 3) apk install cross-build gcc,
+#    and specify to go to use that, with the CC flag
+
+ARG TARGETOS TARGETARCH
 
 # Build the Go services, utilizing caches and share the many common packages.
 # The "id" defaults to the value of "target", the cache will thus be reused during this build.
@@ -65,6 +76,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build cd op-wheel && make op-wheel
 
 FROM --platform=$BUILDPLATFORM builder as op-node-builder
 ARG OP_NODE_VERSION=v0.0.0
+RUN echo TARGETOS=$TARGETOS TARGETARCH=$TARGETARCH BUILDPLATFORM=$BUILDPLATFORM TARGETPLATFORM=$TARGETPLATFORM OP_NODE_VERSION=$OP_NODE_VERSION
 RUN --mount=type=cache,target=/root/.cache/go-build cd op-node && make op-node  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_NODE_VERSION"
 
@@ -72,6 +84,11 @@ FROM --platform=$BUILDPLATFORM builder as op-challenger-builder
 ARG OP_CHALLENGER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/root/.cache/go-build cd op-challenger && make op-challenger  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_CHALLENGER_VERSION"
+
+FROM --platform=$BUILDPLATFORM builder as op-dispute-mon-builder
+ARG OP_DISPUTE_MON_VERSION=v0.0.0
+RUN --mount=type=cache,target=/root/.cache/go-build cd op-dispute-mon && make op-dispute-mon  \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_DISPUTE_MON_VERSION"
 
 FROM --platform=$BUILDPLATFORM builder as op-batcher-builder
 ARG OP_BATCHER_VERSION=v0.0.0
@@ -83,6 +100,14 @@ ARG OP_PROPOSER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/root/.cache/go-build cd op-proposer && make op-proposer  \
     GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_PROPOSER_VERSION"
 
+FROM --platform=$BUILDPLATFORM builder as op-conductor-builder
+ARG OP_CONDUCTOR_VERSION=v0.0.0
+RUN --mount=type=cache,target=/root/.cache/go-build cd op-conductor && make op-conductor  \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE  VERSION="$OP_CONDUCTOR_VERSION"
+
+FROM --platform=$BUILDPLATFORM builder as da-server-builder
+RUN --mount=type=cache,target=/root/.cache/go-build cd op-plasma && make da-server  \
+    GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE
 
 FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as cannon-target
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
@@ -114,6 +139,10 @@ COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 ENV OP_CHALLENGER_CANNON_BIN /usr/local/bin/cannon
 CMD ["op-challenger"]
 
+FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-dispute-mon-target
+COPY --from=op-dispute-mon-builder /app/op-dispute-mon/bin/op-dispute-mon /usr/local/bin/
+CMD ["op-dispute-mon"]
+
 FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-batcher-target
 COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
 CMD ["op-batcher"]
@@ -122,3 +151,10 @@ FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-proposer-target
 COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
 CMD ["op-proposer"]
 
+FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as op-conductor-target
+COPY --from=op-conductor-builder /app/op-conductor/bin/op-conductor /usr/local/bin/
+CMD ["op-conductor"]
+
+FROM --platform=$TARGETPLATFORM $TARGET_BASE_IMAGE as da-server-target
+COPY --from=da-server-builder /app/op-plasma/bin/da-server /usr/local/bin/
+CMD ["da-server"]

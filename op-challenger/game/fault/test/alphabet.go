@@ -2,37 +2,48 @@ package test
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/alphabet"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
 )
 
-func NewAlphabetWithProofProvider(t *testing.T, maxDepth int, oracleError error) *alphabetWithProofProvider {
-	return &alphabetWithProofProvider{
-		alphabet.NewTraceProvider("abcdefghijklmnopqrstuvwxyz", uint64(maxDepth)),
-		uint64(maxDepth),
+func NewAlphabetWithProofProvider(t *testing.T, startingL2BlockNumber *big.Int, maxDepth types.Depth, oracleError error) *AlphabetWithProofProvider {
+	return &AlphabetWithProofProvider{
+		alphabet.NewTraceProvider(startingL2BlockNumber, maxDepth),
+		maxDepth,
 		oracleError,
+		nil,
 	}
 }
 
-func NewAlphabetClaimBuilder(t *testing.T, maxDepth int) *ClaimBuilder {
-	alphabetProvider := NewAlphabetWithProofProvider(t, maxDepth, nil)
+func NewAlphabetClaimBuilder(t *testing.T, startingL2BlockNumber *big.Int, maxDepth types.Depth) *ClaimBuilder {
+	alphabetProvider := NewAlphabetWithProofProvider(t, startingL2BlockNumber, maxDepth, nil)
 	return NewClaimBuilder(t, maxDepth, alphabetProvider)
 }
 
-type alphabetWithProofProvider struct {
+type AlphabetWithProofProvider struct {
 	*alphabet.AlphabetTraceProvider
-	depth       uint64
-	OracleError error
+	depth            types.Depth
+	OracleError      error
+	L2BlockChallenge *types.InvalidL2BlockNumberChallenge
 }
 
-func (a *alphabetWithProofProvider) GetStepData(ctx context.Context, i types.Position) ([]byte, []byte, *types.PreimageOracleData, error) {
+func (a *AlphabetWithProofProvider) GetStepData(ctx context.Context, i types.Position) ([]byte, []byte, *types.PreimageOracleData, error) {
 	preimage, _, _, err := a.AlphabetTraceProvider.GetStepData(ctx, i)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	traceIndex := i.TraceIndex(int(a.depth)).Uint64()
-	data := types.NewPreimageOracleData(types.NoLocalContext, []byte{byte(traceIndex)}, []byte{byte(traceIndex - 1)}, uint32(traceIndex-1))
+	traceIndex := i.TraceIndex(a.depth).Uint64()
+	data := types.NewPreimageOracleData([]byte{byte(traceIndex)}, []byte{byte(traceIndex - 1)}, uint32(traceIndex-1))
 	return preimage, []byte{byte(traceIndex - 1)}, data, nil
+}
+
+func (c *AlphabetWithProofProvider) GetL2BlockNumberChallenge(_ context.Context) (*types.InvalidL2BlockNumberChallenge, error) {
+	if c.L2BlockChallenge != nil {
+		return c.L2BlockChallenge, nil
+	} else {
+		return nil, types.ErrL2BlockNumberValid
+	}
 }

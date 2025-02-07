@@ -8,14 +8,14 @@ import (
 )
 
 type TranslatingProvider struct {
-	rootDepth uint64
+	rootDepth types.Depth
 	provider  types.TraceProvider
 }
 
 // Translate returns a new TraceProvider that translates any requested positions before passing them on to the
 // specified provider.
 // The translation is done such that the root node for provider is at rootDepth.
-func Translate(provider types.TraceProvider, rootDepth uint64) types.TraceProvider {
+func Translate(provider types.TraceProvider, rootDepth types.Depth) types.TraceProvider {
 	return &TranslatingProvider{
 		rootDepth: rootDepth,
 		provider:  provider,
@@ -44,6 +44,10 @@ func (p *TranslatingProvider) GetStepData(ctx context.Context, pos types.Positio
 
 func (p *TranslatingProvider) AbsolutePreStateCommitment(ctx context.Context) (hash common.Hash, err error) {
 	return p.provider.AbsolutePreStateCommitment(ctx)
+}
+
+func (p *TranslatingProvider) GetL2BlockNumberChallenge(ctx context.Context) (*types.InvalidL2BlockNumberChallenge, error) {
+	return p.provider.GetL2BlockNumberChallenge(ctx)
 }
 
 var _ types.TraceProvider = (*TranslatingProvider)(nil)

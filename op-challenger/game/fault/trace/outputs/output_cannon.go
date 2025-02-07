@@ -10,44 +10,40 @@ import (
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/cannon"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/split"
+	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/trace/utils"
 	"github.com/ethereum-optimism/optimism/op-challenger/game/fault/types"
 	"github.com/ethereum-optimism/optimism/op-challenger/metrics"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 func NewOutputCannonTraceAccessor(
-	ctx context.Context,
 	logger log.Logger,
 	m metrics.Metricer,
 	cfg *config.Config,
-	l2Client cannon.L2HeaderSource,
-	contract *contracts.FaultDisputeGameContract,
+	l2Client utils.L2HeaderSource,
+	prestateProvider types.PrestateProvider,
+	rollupClient OutputRollupClient,
 	dir string,
-	gameDepth uint64,
+	l1Head eth.BlockID,
+	splitDepth types.Depth,
 	prestateBlock uint64,
 	poststateBlock uint64,
 ) (*trace.Accessor, error) {
-	// TODO(client-pod#43): Load depths from the contract
-	topDepth := gameDepth / 2
-	bottomDepth := gameDepth - topDepth
-	outputProvider, err := NewTraceProvider(ctx, logger, cfg.RollupRpc, topDepth, prestateBlock, poststateBlock)
-	if err != nil {
-		return nil, err
-	}
-
-	cannonCreator := func(ctx context.Context, localContext common.Hash, agreed contracts.Proposal, claimed contracts.Proposal) (types.TraceProvider, error) {
+	outputProvider := NewTraceProvider(logger, prestateProvider, rollupClient, l2Client, l1Head, splitDepth, prestateBlock, poststateBlock)
+	cannonCreator := func(ctx context.Context, localContext common.Hash, depth types.Depth, agreed contracts.Proposal, claimed contracts.Proposal) (types.TraceProvider, error) {
 		logger := logger.New("pre", agreed.OutputRoot, "post", claimed.OutputRoot, "localContext", localContext)
 		subdir := filepath.Join(dir, localContext.Hex())
-		localInputs, err := cannon.FetchLocalInputsFromProposals(ctx, contract, l2Client, agreed, claimed)
+		localInputs, err := utils.FetchLocalInputsFromProposals(ctx, l1Head.Hash, l2Client, agreed, claimed)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch cannon local inputs: %w", err)
 		}
-		provider := cannon.NewTraceProvider(logger, m, cfg, localContext, localInputs, subdir, bottomDepth)
+		provider := cannon.NewTraceProvider(logger, m, cfg, prestateProvider, localInputs, subdir, depth)
 		return provider, nil
 	}
 
 	cache := NewProviderCache(m, "output_cannon_provider", cannonCreator)
-	selector := split.NewSplitProviderSelector(outputProvider, int(topDepth), OutputRootSplitAdapter(outputProvider, cache.GetOrCreate))
+	selector := split.NewSplitProviderSelector(outputProvider, splitDepth, OutputRootSplitAdapter(outputProvider, cache.GetOrCreate))
 	return trace.NewAccessor(selector), nil
 }

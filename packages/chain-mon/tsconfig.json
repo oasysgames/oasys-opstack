@@ -7,6 +7,9 @@
   "include": [
     "package.json",
     "src/abi/IGnosisSafe.0.8.19.json",
-    "src/**/*"
+    "src/abi/OptimismPortal.json",
+    "src/**/*",
+    "contrib/**/*",
+    "internal/**/*"
   ]
 }

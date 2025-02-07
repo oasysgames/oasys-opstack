@@ -96,15 +96,15 @@ func (mbv *MockBridgeTransfersView) L2BridgeWithdrawalsByAddress(address common.
 	}, nil
 }
 
-func (mbv *MockBridgeTransfersView) L1BridgeDepositSum() (float64, error) {
+func (mbv *MockBridgeTransfersView) L1TxDepositSum() (float64, error) {
 	return 69, nil
 }
-func (mbv *MockBridgeTransfersView) L2BridgeWithdrawalSum() (float64, error) {
+func (mbv *MockBridgeTransfersView) L2BridgeWithdrawalSum(database.WithdrawFilter) (float64, error) {
 	return 420, nil
 }
 
 func TestHealthz(t *testing.T) {
-	logger := testlog.Logger(t, log.LvlInfo)
+	logger := testlog.Logger(t, log.LevelInfo)
 	cfg := &Config{
 		DB:            &TestDBConnector{BridgeTransfers: &MockBridgeTransfersView{}},
 		HTTPServer:    apiConfig,
@@ -122,7 +122,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestL1BridgeDepositsHandler(t *testing.T) {
-	logger := testlog.Logger(t, log.LvlInfo)
+	logger := testlog.Logger(t, log.LevelInfo)
 	cfg := &Config{
 		DB:            &TestDBConnector{BridgeTransfers: &MockBridgeTransfersView{}},
 		HTTPServer:    apiConfig,
@@ -151,7 +151,7 @@ func TestL1BridgeDepositsHandler(t *testing.T) {
 }
 
 func TestL2BridgeWithdrawalsByAddressHandler(t *testing.T) {
-	logger := testlog.Logger(t, log.LvlInfo)
+	logger := testlog.Logger(t, log.LevelInfo)
 	cfg := &Config{
 		DB:            &TestDBConnector{BridgeTransfers: &MockBridgeTransfersView{}},
 		HTTPServer:    apiConfig,

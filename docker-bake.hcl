@@ -49,17 +49,26 @@ variable "OP_CHALLENGER_VERSION" {
   default = "${GIT_VERSION}"
 }
 
-variable OP_HEARTBEAT_VERSION {
+variable "OP_DISPUTE_MON_VERSION" {
   default = "${GIT_VERSION}"
 }
 
-variable OP_PROGRAM_VERSION {
+variable "OP_HEARTBEAT_VERSION" {
   default = "${GIT_VERSION}"
 }
 
-variable CANNON_VERSION {
+variable "OP_PROGRAM_VERSION" {
   default = "${GIT_VERSION}"
 }
+
+variable "CANNON_VERSION" {
+  default = "${GIT_VERSION}"
+}
+
+variable "OP_CONDUCTOR_VERSION" {
+  default = "${GIT_VERSION}"
+}
+
 
 target "op-node" {
   dockerfile = "ops/docker/op-stack-go/Dockerfile"
@@ -113,6 +122,32 @@ target "op-challenger" {
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-challenger:${tag}"]
 }
 
+target "op-dispute-mon" {
+  dockerfile = "ops/docker/op-stack-go/Dockerfile"
+  context = "."
+  args = {
+    GIT_COMMIT = "${GIT_COMMIT}"
+    GIT_DATE = "${GIT_DATE}"
+    OP_DISPUTE_MON_VERSION = "${OP_DISPUTE_MON_VERSION}"
+  }
+  target = "op-dispute-mon-target"
+  platforms = split(",", PLATFORMS)
+  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-dispute-mon:${tag}"]
+}
+
+target "op-conductor" {
+  dockerfile = "ops/docker/op-stack-go/Dockerfile"
+  context = "."
+  args = {
+    GIT_COMMIT = "${GIT_COMMIT}"
+    GIT_DATE = "${GIT_DATE}"
+    OP_CONDUCTOR_VERSION = "${OP_CONDUCTOR_VERSION}"
+  }
+  target = "op-conductor-target"
+  platforms = split(",", PLATFORMS)
+  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-conductor:${tag}"]
+}
+
 target "op-heartbeat" {
   dockerfile = "ops/docker/op-stack-go/Dockerfile"
   context = "."
@@ -126,6 +161,18 @@ target "op-heartbeat" {
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-heartbeat:${tag}"]
 }
 
+target "da-server" {
+  dockerfile = "ops/docker/op-stack-go/Dockerfile"
+  context = "."
+  args = {
+    GIT_COMMIT = "${GIT_COMMIT}"
+    GIT_DATE = "${GIT_DATE}"
+  }
+  target = "da-server-target"
+  platforms = split(",", PLATFORMS)
+  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/da-server:${tag}"]
+}
+
 target "op-program" {
   dockerfile = "ops/docker/op-stack-go/Dockerfile"
   context = "."
@@ -137,6 +184,19 @@ target "op-program" {
   target = "op-program-target"
   platforms = split(",", PLATFORMS)
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-program:${tag}"]
+}
+
+target "op-ufm" {
+  dockerfile = "./op-ufm/Dockerfile"
+  context    = "./"
+  args       = {
+    // op-ufm dockerfile has no _ in the args
+    GITCOMMIT  = "${GIT_COMMIT}"
+    GITDATE    = "${GIT_DATE}"
+    GITVERSION = "${GIT_VERSION}"
+  }
+  platforms = split(",", PLATFORMS)
+  tags      = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/op-ufm:${tag}"]
 }
 
 target "cannon" {
@@ -153,8 +213,8 @@ target "cannon" {
 }
 
 target "proxyd" {
-  dockerfile = "Dockerfile"
-  context = "./proxyd"
+  dockerfile = "./proxyd/Dockerfile"
+  context = "./"
   args = {
     // proxyd dockerfile has no _ in the args
     GITCOMMIT = "${GIT_COMMIT}"
@@ -210,7 +270,16 @@ target "ci-builder" {
   dockerfile = "./ops/docker/ci-builder/Dockerfile"
   context = "."
   platforms = split(",", PLATFORMS)
+  target="base-builder"
   tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/ci-builder:${tag}"]
+}
+
+target "ci-builder-rust" {
+  dockerfile = "./ops/docker/ci-builder/Dockerfile"
+  context = "."
+  platforms = split(",", PLATFORMS)
+  target="rust-builder"
+  tags = [for tag in split(",", IMAGE_TAGS) : "${REGISTRY}/${REPOSITORY}/ci-builder-rust:${tag}"]
 }
 
 target "contracts-bedrock" {

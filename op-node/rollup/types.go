@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 
+	plasma "github.com/ethereum-optimism/optimism/op-plasma"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
@@ -49,6 +50,17 @@ type Genesis struct {
 	SystemConfig eth.SystemConfig `json:"system_config"`
 }
 
+type PlasmaConfig struct {
+	// L1 DataAvailabilityChallenge contract proxy address
+	DAChallengeAddress common.Address `json:"da_challenge_contract_address,omitempty"`
+	// DA challenge window value set on the DAC contract. Used in plasma mode
+	// to compute when a commitment can no longer be challenged.
+	DAChallengeWindow uint64 `json:"da_challenge_window"`
+	// DA resolve window value set on the DAC contract. Used in plasma mode
+	// to compute when a challenge expires and trigger a reorg if needed.
+	DAResolveWindow uint64 `json:"da_resolve_window"`
+}
+
 type Config struct {
 	// Genesis anchor point of the rollup
 	Genesis Genesis `json:"genesis"`
@@ -59,7 +71,12 @@ type Config struct {
 	//
 	// Note: When L1 has many 1 second consecutive blocks, and L2 grows at fixed 2 seconds,
 	// the L2 time may still grow beyond this difference.
-	MaxSequencerDrift uint64 `json:"max_sequencer_drift"`
+	//
+	// With Fjord, the MaxSequencerDrift becomes a constant. Use the ChainSpec
+	// instead of reading this rollup configuration field directly to determine
+	// the max sequencer drift for a given block based on the block's L1 origin.
+	// Chains that activate Fjord at genesis may leave this field empty.
+	MaxSequencerDrift uint64 `json:"max_sequencer_drift,omitempty"`
 	// Number of epochs (L1 blocks) per sequencing window, including the epoch L1 origin block itself
 	SeqWindowSize uint64 `json:"seq_window_size"`
 	// Number of L1 blocks between when a channel can be opened and when it must be closed by.
@@ -75,11 +92,25 @@ type Config struct {
 	// Active if RegolithTime != nil && L2 block timestamp >= *RegolithTime, inactive otherwise.
 	RegolithTime *uint64 `json:"regolith_time,omitempty"`
 
-	// CanyonTime  sets the activation time of the next network upgrade.
+	// CanyonTime sets the activation time of the Canyon network upgrade.
 	// Active if CanyonTime != nil && L2 block timestamp >= *CanyonTime, inactive otherwise.
 	CanyonTime *uint64 `json:"canyon_time,omitempty"`
 
-	SpanBatchTime *uint64 `json:"span_batch_time,omitempty"`
+	// DeltaTime sets the activation time of the Delta network upgrade.
+	// Active if DeltaTime != nil && L2 block timestamp >= *DeltaTime, inactive otherwise.
+	DeltaTime *uint64 `json:"delta_time,omitempty"`
+
+	// EcotoneTime sets the activation time of the Ecotone network upgrade.
+	// Active if EcotoneTime != nil && L2 block timestamp >= *EcotoneTime, inactive otherwise.
+	EcotoneTime *uint64 `json:"ecotone_time,omitempty"`
+
+	// FjordTime sets the activation time of the Fjord network upgrade.
+	// Active if FjordTime != nil && L2 block timestamp >= *FjordTime, inactive otherwise.
+	FjordTime *uint64 `json:"fjord_time,omitempty"`
+
+	// InteropTime sets the activation time for an experimental feature-set, activated like a hardfork.
+	// Active if InteropTime != nil && L2 block timestamp >= *InteropTime, inactive otherwise.
+	InteropTime *uint64 `json:"interop_time,omitempty"`
 
 	// Note: below addresses are part of the block-derivation process,
 	// and required to be the same network-wide to stay in consensus.
@@ -93,6 +124,23 @@ type Config struct {
 
 	// L1 address that declares the protocol versions, optional (Beta feature)
 	ProtocolVersionsAddress common.Address `json:"protocol_versions_address,omitempty"`
+
+	// Plasma Config. We are in the process of migrating to the PlasmaConfig from these legacy top level values
+	PlasmaConfig *PlasmaConfig `json:"plasma_config,omitempty"`
+
+	// L1 DataAvailabilityChallenge contract proxy address
+	LegacyDAChallengeAddress common.Address `json:"da_challenge_contract_address,omitempty"`
+
+	// DA challenge window value set on the DAC contract. Used in plasma mode
+	// to compute when a commitment can no longer be challenged.
+	LegacyDAChallengeWindow uint64 `json:"da_challenge_window,omitempty"`
+
+	// DA resolve window value set on the DAC contract. Used in plasma mode
+	// to compute when a challenge expires and trigger a reorg if needed.
+	LegacyDAResolveWindow uint64 `json:"da_resolve_window,omitempty"`
+
+	// LegacyUsePlasma is activated when the chain is in plasma mode.
+	LegacyUsePlasma bool `json:"use_plasma,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -111,13 +159,16 @@ func (cfg *Config) ValidateL1Config(ctx context.Context, client L1Client) error 
 }
 
 // ValidateL2Config checks L2 config variables for errors.
-func (cfg *Config) ValidateL2Config(ctx context.Context, client L2Client) error {
+func (cfg *Config) ValidateL2Config(ctx context.Context, client L2Client, skipL2GenesisBlockHash bool) error {
 	// Validate the L2 Client Chain ID
 	if err := cfg.CheckL2ChainID(ctx, client); err != nil {
 		return err
 	}
 
-	// Validate the Rollup L2 Genesis Blockhash
+	// Validate the Rollup L2 Genesis Blockhash if requested. We skip this when doing EL sync
+	if skipL2GenesisBlockHash {
+		return nil
+	}
 	if err := cfg.CheckL2GenesisBlockHash(ctx, client); err != nil {
 		return err
 	}
@@ -257,11 +308,70 @@ func (cfg *Config) Check() error {
 	if cfg.L2ChainID.Sign() < 1 {
 		return ErrL2ChainIDNotPositive
 	}
+	if err := validatePlasmaConfig(cfg); err != nil {
+		return err
+	}
+
+	if err := checkFork(cfg.RegolithTime, cfg.CanyonTime, "regolith", "canyon"); err != nil {
+		return err
+	}
+	if err := checkFork(cfg.CanyonTime, cfg.DeltaTime, "canyon", "delta"); err != nil {
+		return err
+	}
+	if err := checkFork(cfg.DeltaTime, cfg.EcotoneTime, "delta", "ecotone"); err != nil {
+		return err
+	}
+	if err := checkFork(cfg.EcotoneTime, cfg.FjordTime, "ecotone", "fjord"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validatePlasmaConfig checks the two approaches to configuring plasma mode.
+// If the legacy values are set, they are copied to the new location. If both are set, they are check for consistency.
+func validatePlasmaConfig(cfg *Config) error {
+	if cfg.LegacyUsePlasma && cfg.PlasmaConfig == nil {
+		// copy from top level to plasma config
+		cfg.PlasmaConfig = &PlasmaConfig{
+			DAChallengeAddress: cfg.LegacyDAChallengeAddress,
+			DAChallengeWindow:  cfg.LegacyDAChallengeWindow,
+			DAResolveWindow:    cfg.LegacyDAResolveWindow,
+		}
+	} else if cfg.LegacyUsePlasma && cfg.PlasmaConfig != nil {
+		// validate that both are the same
+		if cfg.LegacyDAChallengeAddress != cfg.PlasmaConfig.DAChallengeAddress {
+			return fmt.Errorf("LegacyDAChallengeAddress (%v) !=  PlasmaConfig.DAChallengeAddress (%v)", cfg.LegacyDAChallengeAddress, cfg.PlasmaConfig.DAChallengeAddress)
+		}
+		if cfg.LegacyDAChallengeWindow != cfg.PlasmaConfig.DAChallengeWindow {
+			return fmt.Errorf("LegacyDAChallengeWindow (%v) !=  PlasmaConfig.DAChallengeWindow (%v)", cfg.LegacyDAChallengeWindow, cfg.PlasmaConfig.DAChallengeWindow)
+		}
+		if cfg.LegacyDAResolveWindow != cfg.PlasmaConfig.DAResolveWindow {
+			return fmt.Errorf("LegacyDAResolveWindow (%v) !=  PlasmaConfig.DAResolveWindow (%v)", cfg.LegacyDAResolveWindow, cfg.PlasmaConfig.DAResolveWindow)
+		}
+	}
+	return nil
+}
+
+// checkFork checks that fork A is before or at the same time as fork B
+func checkFork(a, b *uint64, aName, bName string) error {
+	if a == nil && b == nil {
+		return nil
+	}
+	if a == nil && b != nil {
+		return fmt.Errorf("fork %s set (to %d), but prior fork %s missing", bName, *b, aName)
+	}
+	if a != nil && b == nil {
+		return nil
+	}
+	if *a > *b {
+		return fmt.Errorf("fork %s set to %d, but prior fork %s has higher offset %d", bName, *b, aName, *a)
+	}
 	return nil
 }
 
 func (c *Config) L1Signer() types.Signer {
-	return types.NewLondonSigner(c.L1ChainID)
+	return types.NewCancunSigner(c.L1ChainID)
 }
 
 // IsRegolith returns true if the Regolith hardfork is active at or past the given timestamp.
@@ -274,8 +384,108 @@ func (c *Config) IsCanyon(timestamp uint64) bool {
 	return c.CanyonTime != nil && timestamp >= *c.CanyonTime
 }
 
-func (c *Config) IsSpanBatch(timestamp uint64) bool {
-	return c.SpanBatchTime != nil && timestamp >= *c.SpanBatchTime
+// IsDelta returns true if the Delta hardfork is active at or past the given timestamp.
+func (c *Config) IsDelta(timestamp uint64) bool {
+	return c.DeltaTime != nil && timestamp >= *c.DeltaTime
+}
+
+// IsEcotone returns true if the Ecotone hardfork is active at or past the given timestamp.
+func (c *Config) IsEcotone(timestamp uint64) bool {
+	return c.EcotoneTime != nil && timestamp >= *c.EcotoneTime
+}
+
+// IsEcotoneActivationBlock returns whether the specified block is the first block subject to the
+// Ecotone upgrade. Ecotone activation at genesis does not count.
+func (c *Config) IsEcotoneActivationBlock(l2BlockTime uint64) bool {
+	return c.IsEcotone(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsEcotone(l2BlockTime-c.BlockTime)
+}
+
+// IsFjord returns true if the Fjord hardfork is active at or past the given timestamp.
+func (c *Config) IsFjord(timestamp uint64) bool {
+	return c.FjordTime != nil && timestamp >= *c.FjordTime
+}
+
+// IsInterop returns true if the Interop hardfork is active at or past the given timestamp.
+func (c *Config) IsInterop(timestamp uint64) bool {
+	return c.InteropTime != nil && timestamp >= *c.InteropTime
+}
+
+// ForkchoiceUpdatedVersion returns the EngineAPIMethod suitable for the chain hard fork version.
+func (c *Config) ForkchoiceUpdatedVersion(attr *eth.PayloadAttributes) eth.EngineAPIMethod {
+	if attr == nil {
+		// Don't begin payload build process.
+		return eth.FCUV3
+	}
+	ts := uint64(attr.Timestamp)
+	if c.IsEcotone(ts) {
+		// Cancun
+		return eth.FCUV3
+	} else if c.IsCanyon(ts) {
+		// Shanghai
+		return eth.FCUV2
+	} else {
+		// According to Ethereum engine API spec, we can use fcuV2 here,
+		// but upstream Geth v1.13.11 does not accept V2 before Shanghai.
+		return eth.FCUV1
+	}
+}
+
+// NewPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
+func (c *Config) NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
+	if c.IsEcotone(timestamp) {
+		// Cancun
+		return eth.NewPayloadV3
+	} else {
+		return eth.NewPayloadV2
+	}
+}
+
+// GetPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
+func (c *Config) GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
+	if c.IsEcotone(timestamp) {
+		// Cancun
+		return eth.GetPayloadV3
+	} else {
+		return eth.GetPayloadV2
+	}
+}
+
+// GetOPPlasmaConfig validates and returns the plasma config from the rollup config.
+func (c *Config) GetOPPlasmaConfig() (plasma.Config, error) {
+	if c.PlasmaConfig == nil {
+		return plasma.Config{}, errors.New("no plasma config")
+	}
+	if c.PlasmaConfig.DAChallengeAddress == (common.Address{}) {
+		return plasma.Config{}, errors.New("missing DAChallengeAddress")
+	}
+	if c.PlasmaConfig.DAChallengeWindow == uint64(0) {
+		return plasma.Config{}, errors.New("missing DAChallengeWindow")
+	}
+	if c.PlasmaConfig.DAResolveWindow == uint64(0) {
+		return plasma.Config{}, errors.New("missing DAResolveWindow")
+	}
+	return plasma.Config{
+		DAChallengeContractAddress: c.PlasmaConfig.DAChallengeAddress,
+		ChallengeWindow:            c.PlasmaConfig.DAChallengeWindow,
+		ResolveWindow:              c.PlasmaConfig.DAResolveWindow,
+	}, nil
+}
+
+func (c *Config) PlasmaEnabled() bool {
+	return c.PlasmaConfig != nil
+}
+
+// SyncLookback computes the number of blocks to walk back in order to find the correct L1 origin.
+// In plasma mode longest possible window is challenge + resolve windows.
+func (c *Config) SyncLookback() uint64 {
+	if c.PlasmaEnabled() {
+		if win := (c.PlasmaConfig.DAChallengeWindow + c.PlasmaConfig.DAResolveWindow); win > c.SeqWindowSize {
+			return win
+		}
+	}
+	return c.SeqWindowSize
 }
 
 // Description outputs a banner describing the important parts of rollup configuration in a human-readable form.
@@ -306,7 +516,10 @@ func (c *Config) Description(l2Chains map[string]string) string {
 	banner += "Post-Bedrock Network Upgrades (timestamp based):\n"
 	banner += fmt.Sprintf("  - Regolith: %s\n", fmtForkTimeOrUnset(c.RegolithTime))
 	banner += fmt.Sprintf("  - Canyon: %s\n", fmtForkTimeOrUnset(c.CanyonTime))
-	banner += fmt.Sprintf("  - SpanBatch: %s\n", fmtForkTimeOrUnset(c.SpanBatchTime))
+	banner += fmt.Sprintf("  - Delta: %s\n", fmtForkTimeOrUnset(c.DeltaTime))
+	banner += fmt.Sprintf("  - Ecotone: %s\n", fmtForkTimeOrUnset(c.EcotoneTime))
+	banner += fmt.Sprintf("  - Fjord: %s\n", fmtForkTimeOrUnset(c.FjordTime))
+	banner += fmt.Sprintf("  - Interop: %s\n", fmtForkTimeOrUnset(c.InteropTime))
 	// Report the protocol version
 	banner += fmt.Sprintf("Node supports up to OP-Stack Protocol Version: %s\n", OPStackSupport)
 	return banner
@@ -333,7 +546,10 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 		"l2_block_number", c.Genesis.L2.Number, "l1_block_hash", c.Genesis.L1.Hash.String(),
 		"l1_block_number", c.Genesis.L1.Number, "regolith_time", fmtForkTimeOrUnset(c.RegolithTime),
 		"canyon_time", fmtForkTimeOrUnset(c.CanyonTime),
-		"span_batch_time", fmtForkTimeOrUnset(c.SpanBatchTime),
+		"delta_time", fmtForkTimeOrUnset(c.DeltaTime),
+		"ecotone_time", fmtForkTimeOrUnset(c.EcotoneTime),
+		"fjord_time", fmtForkTimeOrUnset(c.FjordTime),
+		"interop_time", fmtForkTimeOrUnset(c.InteropTime),
 	)
 }
 

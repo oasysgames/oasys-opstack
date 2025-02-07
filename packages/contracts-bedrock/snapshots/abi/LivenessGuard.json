@@ -2,26 +2,13 @@
   {
     "inputs": [
       {
-        "internalType": "contract Safe",
+        "internalType": "contract GnosisSafe",
         "name": "_safe",
         "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnerRecorded",
-    "type": "event"
   },
   {
     "inputs": [
@@ -128,7 +115,7 @@
     "name": "safe",
     "outputs": [
       {
-        "internalType": "contract Safe",
+        "internalType": "contract GnosisSafe",
         "name": "safe_",
         "type": "address"
       }
@@ -144,25 +131,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes4",
-        "name": "interfaceId",
-        "type": "bytes4"
-      }
-    ],
-    "name": "supportsInterface",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "version",
     "outputs": [
@@ -174,5 +142,18 @@
     ],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnerRecorded",
+    "type": "event"
   }
 ]
