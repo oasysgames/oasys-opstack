@@ -269,7 +269,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
     function _upgradeOptimismPortal(uint256 _chainId) internal {
         IPrevOasysPortal prev = IPrevOasysPortal(proxies[_chainId].optimismPortal);
 
-        _manager().upgradeAndCall({
+        _manager().upgradeAndCallWithStorageUpdate({
             _chainId: _chainId,
             _proxy: proxies[_chainId].optimismPortal,
             _implementation: OPTIMISM_PORTAL,
@@ -295,7 +295,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
     function _upgradeOasysL2OutputOracle(uint256 _chainId) internal {
         IPrevOasysL2OutputOracle prev = IPrevOasysL2OutputOracle(proxies[_chainId].l2OutputOracle);
 
-        _manager().upgradeAndCall({
+        _manager().upgradeAndCallWithStorageUpdate({
             _chainId: _chainId,
             _proxy: proxies[_chainId].l2OutputOracle,
             _implementation: L2_OUTPUT_ORACLE,
@@ -331,7 +331,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
         // slither-disable-next-line unused-return
         (,,,,,,,, address batchInbox) = _buildAgent().builtLists(_chainId);
 
-        _manager().upgradeAndCall({
+        _manager().upgradeAndCallWithStorageUpdate({
             _chainId: _chainId,
             _proxy: proxies[_chainId].systemConfig,
             _implementation: SYSTEM_CONFIG,
@@ -395,7 +395,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
     function _upgradeL1CrossDomainMessenger(uint256 _chainId) internal {
         address addressManager = address(_manager().proxyAdmin(_chainId).addressManager());
 
-        _manager().upgradeAndCall({
+        _manager().upgradeAndCallWithStorageUpdate({
             _chainId: _chainId,
             _proxy: proxies[_chainId].l1CrossDomainMessenger,
             _implementation: L1_CROSS_DOMAIN_MESSENGER,
@@ -435,7 +435,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
             //   - slot0 contains the messenger address (right-aligned)
             //   - must shift left by 2bytes to accommodate Initializable flags
             //   - preserves messenger address while allowing proper initialization
-            _manager().upgradeAndCall({
+            _manager().upgradeAndCallWithStorageUpdate({
                 _chainId: _chainId,
                 _proxy: proxies[_chainId].l1StandardBridge,
                 _implementation: L1_STANDARD_BRIDGE,

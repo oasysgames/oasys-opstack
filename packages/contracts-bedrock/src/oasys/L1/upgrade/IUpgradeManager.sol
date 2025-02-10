@@ -40,7 +40,7 @@ interface IUpgradeManager {
     /// @param _proxy Address of the proxy contract to upgrade
     /// @param _implementation Address of the new implementation contract
     /// @param _storageUpdate Storage slot modification details
-    function upgrade(
+    function upgradeWithStorageUpdate(
         uint256 _chainId,
         address _proxy,
         address _implementation,
@@ -62,7 +62,7 @@ interface IUpgradeManager {
     /// @param _implementation Address of the new implementation contract
     /// @param _data Call data for some function
     /// @param _storageUpdate Storage slot modification details
-    function upgradeAndCall(
+    function upgradeAndCallWithStorageUpdate(
         uint256 _chainId,
         address _proxy,
         address _implementation,

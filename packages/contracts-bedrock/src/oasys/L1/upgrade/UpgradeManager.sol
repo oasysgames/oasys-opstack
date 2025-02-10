@@ -280,7 +280,7 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
     }
 
     /// @inheritdoc IUpgradeManager
-    function upgrade(
+    function upgradeWithStorageUpdate(
         uint256 _chainId,
         address _proxy,
         address _implementation,
@@ -289,7 +289,7 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
         external
         onlyCurrentImplementer(_chainId)
     {
-        _upgrade(_chainId, _proxy, _implementation, new bytes(0), _storageUpdate);
+        _upgradeWithStorageUpdate(_chainId, _proxy, _implementation, new bytes(0), _storageUpdate);
     }
 
     /// @inheritdoc IUpgradeManager
@@ -306,7 +306,7 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
     }
 
     /// @inheritdoc IUpgradeManager
-    function upgradeAndCall(
+    function upgradeAndCallWithStorageUpdate(
         uint256 _chainId,
         address _proxy,
         address _implementation,
@@ -316,7 +316,7 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
         external
         onlyCurrentImplementer(_chainId)
     {
-        _upgrade(_chainId, _proxy, _implementation, _data, _storageUpdate);
+        _upgradeWithStorageUpdate(_chainId, _proxy, _implementation, _data, _storageUpdate);
     }
 
     /// @notice Sets the owner of the ProxyAdmin for a chain
@@ -368,7 +368,7 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
     }
 
     /// @notice Upgrades a proxy contract implementation with storage modification
-    function _upgrade(
+    function _upgradeWithStorageUpdate(
         uint256 _chainId,
         address _proxy,
         address _implementation,
