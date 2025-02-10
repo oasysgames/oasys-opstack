@@ -4,6 +4,12 @@ pragma solidity 0.8.15;
 /// @title IUpgradeImplementer
 /// @notice L1 Upgrade implementer interface
 interface IUpgradeImplementer {
+    /// @notice Emitted when a new proxy is deployed
+    /// @param chainId The Chain ID of the target Verse-Layer
+    /// @param name Name of the proxied contract
+    /// @param proxy Address of the Proxy
+    event ProxyDeployed(uint256 indexed chainId, string indexed name, address proxy);
+
     /// @notice Returns the implementer index in the upgrade process
     function implementerIndex() external view returns (uint256);
 

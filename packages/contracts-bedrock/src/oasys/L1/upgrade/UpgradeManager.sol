@@ -3,7 +3,7 @@ pragma solidity 0.8.15;
 
 // Openzeppelin Libraries
 import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { ERC165Checker } from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 
 // Interfaces
@@ -64,41 +64,7 @@ import { StorageSetter } from "src/universal/StorageSetter.sol";
 ///           The UpgradeManager owner performs the return of ownership.
 ///         - The process can be monitored through emitted events.
 ///
-contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
-    /// @notice Emitted when a new upgrade implementer is added to the manager
-    /// @param implementer The address of the newly added implementer
-    /// @param implementerIndex The index assigned to the implementer
-    /// @param upgradeName The name of the implementer
-    event ImplementerAdded(address indexed implementer, uint256 indexed implementerIndex, string indexed upgradeName);
-
-    /// @notice Emitted when a ProxyAdmin owner is registered
-    /// @param chainId The Chain ID of the target Verse-Layer
-    /// @param owner The address of the registered owner
-    event ProxyAdminOwnerRegistered(uint256 indexed chainId, address indexed owner);
-
-    /// @notice Emitted when a ProxyAdmin owner is released
-    /// @param chainId The Chain ID of the target Verse-Layer
-    /// @param owner The owner address to release to
-    event ProxyAdminOwnerReleased(uint256 indexed chainId, address indexed owner);
-
-    /// @notice Emitted when a proxy contract's implementation is upgraded
-    /// @param chainId The Chain ID of the target Verse-Layer
-    /// @param proxy The address of the proxy contract that was upgraded
-    /// @param implementation The address of the new implementation
-    event ProxyUpgraded(uint256 indexed chainId, address indexed proxy, address implementation);
-
-    /// @notice Emitted when the upgrade process advances a step
-    /// @param chainId The Chain ID of the target Verse-Layer
-    /// @param upgradeName The name of the current upgrade process
-    /// @param step The current step number that was completed
-    /// @param totalSteps The total number of steps in the upgrade process
-    event UpgradeStepAdvanced(uint256 indexed chainId, string indexed upgradeName, uint256 step, uint256 totalSteps);
-
-    /// @notice Emitted when an upgrade process is fully completed
-    /// @param chainId The Chain ID of the target Verse-Layer
-    /// @param upgradeName The name of the completed upgrade process
-    event UpgradeCompleted(uint256 indexed chainId, string indexed upgradeName);
-
+contract UpgradeManager is IERC165, ISemver, IUpgradeManager, OwnableUpgradeable {
     /// @dev Tracks the status of an upgrade for each chain
     struct Status {
         // Index of the current upgrade implementer
@@ -111,7 +77,7 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
     StorageSetter public immutable storageSetter;
 
     /// @inheritdoc IUpgradeManager
-    IL1BuildAgent public immutable buildAgent;
+    IL1BuildAgent public buildAgent;
 
     // List of upgrade implementers
     IUpgradeImplementer[] public implementers;
@@ -150,17 +116,25 @@ contract UpgradeManager is IERC165, ISemver, IUpgradeManager, Ownable {
         _;
     }
 
-    /// @notice Initializes the upgrade manager
+    /// @notice Constructs the UpgradeManager contract.
+    ///         Cannot set the _owner and _buildAgent to `address(0)`
+    ///         due to the Ownable contract's implementation, so set it to `address(0xdEaD)`
+    constructor() {
+        storageSetter = new StorageSetter();
+        initialize({ _owner: address(0xdEaD), _buildAgent: address(0xdEaD) });
+    }
+
+    /// @notice Initializer.
     /// @param _owner Address that will own this contract
     /// @param _buildAgent Address of the BuildAgent contract
-    constructor(address _owner, address _buildAgent) {
+    function initialize(address _owner, address _buildAgent) public initializer {
+        __Ownable_init();
+
         require(_owner != address(0), "UpgradeManager: owner is zero address");
         transferOwnership(_owner);
 
         require(_buildAgent != address(0), "UpgradeManager: buildAgent is zero address");
         buildAgent = IL1BuildAgent(_buildAgent);
-
-        storageSetter = new StorageSetter();
     }
 
     /// @notice Semantic version.

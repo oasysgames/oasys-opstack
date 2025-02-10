@@ -8,6 +8,40 @@ import { StorageSetter } from "src/universal/StorageSetter.sol";
 /// @title IUpgradeManager
 /// @notice Interface for managing L2 upgrades across multiple versions
 interface IUpgradeManager {
+    /// @notice Emitted when a new upgrade implementer is added to the manager
+    /// @param implementer The address of the newly added implementer
+    /// @param implementerIndex The index assigned to the implementer
+    /// @param upgradeName The name of the implementer
+    event ImplementerAdded(address indexed implementer, uint256 indexed implementerIndex, string indexed upgradeName);
+
+    /// @notice Emitted when a ProxyAdmin owner is registered
+    /// @param chainId The Chain ID of the target Verse-Layer
+    /// @param owner The address of the registered owner
+    event ProxyAdminOwnerRegistered(uint256 indexed chainId, address indexed owner);
+
+    /// @notice Emitted when a ProxyAdmin owner is released
+    /// @param chainId The Chain ID of the target Verse-Layer
+    /// @param owner The owner address to release to
+    event ProxyAdminOwnerReleased(uint256 indexed chainId, address indexed owner);
+
+    /// @notice Emitted when a proxy contract's implementation is upgraded
+    /// @param chainId The Chain ID of the target Verse-Layer
+    /// @param proxy The address of the proxy contract that was upgraded
+    /// @param implementation The address of the new implementation
+    event ProxyUpgraded(uint256 indexed chainId, address indexed proxy, address implementation);
+
+    /// @notice Emitted when the upgrade process advances a step
+    /// @param chainId The Chain ID of the target Verse-Layer
+    /// @param upgradeName The name of the current upgrade process
+    /// @param step The current step number that was completed
+    /// @param totalSteps The total number of steps in the upgrade process
+    event UpgradeStepAdvanced(uint256 indexed chainId, string indexed upgradeName, uint256 step, uint256 totalSteps);
+
+    /// @notice Emitted when an upgrade process is fully completed
+    /// @param chainId The Chain ID of the target Verse-Layer
+    /// @param upgradeName The name of the completed upgrade process
+    event UpgradeCompleted(uint256 indexed chainId, string indexed upgradeName);
+
     /// @notice Parameters for updating specific storage slot values
     struct StorageUpdate {
         bytes32 slot; // Target storage slot

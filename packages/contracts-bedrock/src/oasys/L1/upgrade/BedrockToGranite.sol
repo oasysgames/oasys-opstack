@@ -76,8 +76,6 @@ interface IPrevSystemConfig {
 /// @title BedrockToGranite
 /// @notice An implementation contract for upgrading the network from Bedrock to Granite.
 contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
-    event SuperchainConfigProxyDeployed(uint256 indexed chainId, address proxy);
-
     /// @notice Stores proxy addresses for L1 contracts
     struct Proxies {
         address superchainConfig;
@@ -242,7 +240,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
         Proxy _proxy = new Proxy({ _admin: address(_manager().proxyAdmin(_chainId)) });
         proxies[_chainId].superchainConfig = address(_proxy);
 
-        emit SuperchainConfigProxyDeployed(_chainId, address(_proxy));
+        emit ProxyDeployed(_chainId, "SuperchainConfig", address(_proxy));
     }
 
     /// @notice Upgrades SuperchainConfig implementation
@@ -386,7 +384,7 @@ contract BedrockToGranite is IERC165, ISemver, IUpgradeImplementer {
                 gasPayingToken: Constants.ETHER,
                 disputeGameFactory: address(0), // Not used in the Oasys
                 optimismMintableERC20Factory: address(0) // Not used in the Oasys
-            })
+             })
         );
     }
 

@@ -25,6 +25,7 @@ import { OasysL1ERC721Bridge } from "src/oasys/L1/messaging/OasysL1ERC721Bridge.
 // Universal contracts and interfaces
 import { ISemver } from "src/universal/ISemver.sol";
 import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
+import { Proxy } from "src/universal/Proxy.sol";
 
 // Builder interfaces
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
@@ -126,7 +127,7 @@ contract L1UpgradeManager_Test is Test, IERC165 {
     event ProxyUpgraded(uint256 indexed chainId, address indexed proxy, address implementation);
     event UpgradeStepAdvanced(uint256 indexed chainId, string indexed upgradeName, uint256 step, uint256 totalSteps);
     event UpgradeCompleted(uint256 indexed chainId, string indexed upgradeName);
-    event SuperchainConfigProxyDeployed(uint256 indexed chainId, address proxy);
+    event ProxyDeployed(uint256 indexed chainId, string indexed name, address proxy);
 
     enum Upgrade {
         BEDROCK,
@@ -182,8 +183,18 @@ contract L1UpgradeManager_Test is Test, IERC165 {
         console.log();
 
         // Deploy UpgradeManager
+        UpgradeManager upgradeManagerImpl = new UpgradeManager();
+
         vm.prank(deployer);
-        upgradeManager = new UpgradeManager({ _owner: deployer, _buildAgent: address(buildAgent) });
+        Proxy upgradeManagerProxy = new Proxy({ _admin: deployer });
+
+        vm.prank(deployer);
+        upgradeManagerProxy.upgradeToAndCall({
+            _implementation: address(upgradeManagerImpl),
+            _data: abi.encodeCall(UpgradeManager.initialize, (deployer, address(buildAgent)))
+        });
+
+        upgradeManager = UpgradeManager(address(upgradeManagerProxy));
         console.log("UpgradeManager: %s", address(upgradeManager));
         console.log();
 
@@ -233,6 +244,21 @@ contract L1UpgradeManager_Test is Test, IERC165 {
         _assert_L1CrossDomainMessenger(Upgrade.BEDROCK);
         _assert_L1StandardBridge(Upgrade.BEDROCK);
         _assert_L1ERC721Bridge(Upgrade.BEDROCK);
+    }
+
+    function test_prevent_reinitialize() public {
+        vm.prank(deployer);
+        vm.expectRevert("Initializable: contract is already initialized");
+        upgradeManager.initialize({ _owner: address(1), _buildAgent: address(1) });
+    }
+
+    function test_transferOwnership() public {
+        assert(upgradeManager.owner() == deployer);
+
+        vm.prank(deployer);
+        upgradeManager.transferOwnership(address(1));
+
+        assert(upgradeManager.owner() == address(1));
     }
 
     function test_addNextImplementer() public {
@@ -401,7 +427,7 @@ contract L1UpgradeManager_Test is Test, IERC165 {
 
         // UPGRADE STEP 3: Run `upgradeContracts`
         vm.expectEmit(address(bedrockToGranite));
-        emit SuperchainConfigProxyDeployed(chainId, 0x45C92C2Cd0dF7B2d705EF12CfF77Cb0Bc557Ed22);
+        emit ProxyDeployed(chainId, "SuperchainConfig", 0xeafCcCE3F73a1ac8690F49acF56C4142183619dd);
         vm.expectEmit(address(upgradeManager));
         emit ProxyUpgraded(chainId, builts.systemConfig, bedrockToGranite.SYSTEM_CONFIG());
         vm.expectEmit(address(upgradeManager));
