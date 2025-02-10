@@ -115,7 +115,7 @@ contract FakeUpgradeImplementer is IERC165, IUpgradeImplementer {
         return _interfaceId == type(IUpgradeImplementer).interfaceId || _interfaceId == type(IERC165).interfaceId;
     }
 
-    function executeUpgradeStep(uint256 _chainId, uint8 _step) external returns (bool _completed) {
+    function executeUpgradeStep(uint256, uint8) external pure returns (bool _completed) {
         return true;
     }
 }
