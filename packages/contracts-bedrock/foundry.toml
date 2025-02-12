@@ -41,7 +41,8 @@ fs_permissions = [
   { access='write', path='./semver-lock.json' },
   { access='read-write', path='./tmp' },
   { access='read-write', path='./.testdata/' },
-  { access='read', path='./kout-deployment' }
+  { access='read', path='./kout-deployment' },
+  { access='read', path='./test/oasys/L1/upgrade/artifacts' }
 ]
 libs = ["node_modules", "lib"]
 

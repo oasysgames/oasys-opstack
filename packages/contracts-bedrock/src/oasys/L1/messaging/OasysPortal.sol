@@ -8,6 +8,7 @@ import { Hashing } from "src/libraries/Hashing.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
 import { SystemConfig } from "src/L1/SystemConfig.sol";
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { IOasysL2OutputOracle } from "src/oasys/L1/interfaces/IOasysL2OutputOracle.sol";
 
 /// @custom:proxied
@@ -22,30 +23,21 @@ contract OasysPortal is OptimismPortal {
     /// @param relayer The address of the new message relayer.
     event MessageRelayerSet(address indexed relayer);
 
-    constructor(
-        L2OutputOracle _l2Oracle,
-        address _guardian,
-        bool _paused,
-        SystemConfig _systemConfig
-    )
-        OptimismPortal(_l2Oracle, _guardian, _paused, _systemConfig)
-    { }
-
-    /// @inheritdoc OptimismPortal
-    function initialize(bool _paused) public override {
-        super.initialize(_paused);
-    }
-
     /// @notice Initalize with setting messager relayer
-    function initializeWithRelayer(bool _paused, address _messageRelayer) public {
+    function initializeWithRelayer(
+        L2OutputOracle _l2Oracle,
+        SystemConfig _systemConfig,
+        SuperchainConfig _superchainConfig,
+        address _messageRelayer
+    ) public {
+        initialize({ _l2Oracle: _l2Oracle, _systemConfig: _systemConfig, _superchainConfig: _superchainConfig });
         messageRelayer = _messageRelayer;
-        initialize(_paused);
     }
 
     /// @notice Set a new message relayer address.
     ///         If the zero address is set, no immediate relay of withdrawal messages.
     function setMessageRelayer(address newRelayer) external {
-        require(msg.sender == GUARDIAN, "OasysPortal: only guardian can set a new message relayer");
+        require(msg.sender == superchainConfig.guardian(), "OasysPortal: only guardian can set a new message relayer");
         require(newRelayer != messageRelayer, "OasysPortal: already set");
 
         messageRelayer = newRelayer;
@@ -80,7 +72,7 @@ contract OasysPortal is OptimismPortal {
             // Therefore, we wait based on the proven tx timestamp.
             // Ref: https://github.com/oasysgames/oasys-opstack/issues/118
             //slither-disable-next-line calls-inside-a-loop
-            uint256 verified = IOasysL2OutputOracle(address(L2_ORACLE)).verifiedL1Timestamp();
+            uint256 verified = IOasysL2OutputOracle(address(l2Oracle)).verifiedL1Timestamp();
             if (verified > _timestamp) {
                 return true;
             }

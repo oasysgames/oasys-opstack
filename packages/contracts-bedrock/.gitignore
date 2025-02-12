@@ -6,6 +6,9 @@ broadcast
 kout-deployment
 kout-proofs
 test/kontrol/logs
+tmp
+
+!test/oasys/L1/upgrade/artifacts/
 
 # Metrics
 coverage.out

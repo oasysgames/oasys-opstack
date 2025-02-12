@@ -15,17 +15,12 @@ import { IOptimismMintableERC721 } from "src/universal/IOptimismMintableERC721.s
 ///         the legacy L2ERC721Bridge implemented by Oasys to the official Optimism L2ERC721Bridge.
 ///         This bridge supports OptimismMintableERC721 and legacy L2StandardERC721.
 contract OasysL2ERC721Bridge is L2ERC721Bridge, ILegacyL2ERC721Bridge {
-    /// @notice Constructs the OasysL2ERC721Bridge contract.
-    /// @param _messenger   Address of the CrossDomainMessenger on this network.
-    /// @param _otherBridge Address of the ERC721 bridge on the other network.
-    constructor(address _messenger, address _otherBridge) L2ERC721Bridge(_messenger, _otherBridge) { }
-
     /// @custom:legacy
     /// @inheritdoc ILegacyL2ERC721Bridge
     /// @dev Ref:
     /// https://github.com/oasysgames/oasys-optimism/blob/4d667a169296f37422ffaa4901e8d149e84abe5a/packages/contracts/contracts/oasys/L2/messaging/L2ERC721Bridge.sol#L30
     function l1ERC721Bridge() external view returns (address) {
-        return OTHER_BRIDGE;
+        return address(otherBridge);
     }
 
     /// @custom:legacy
@@ -187,7 +182,7 @@ contract OasysL2ERC721Bridge is L2ERC721Bridge, ILegacyL2ERC721Bridge {
 
             // Send message to L1 bridge
             // slither-disable-next-line reentrancy-events
-            MESSENGER.sendMessage(OTHER_BRIDGE, message, _minGasLimit);
+            messenger.sendMessage(address(otherBridge), message, _minGasLimit);
 
             // slither-disable-next-line reentrancy-events
             emit ERC721BridgeInitiated(_localToken, remoteToken, _from, _to, _tokenId, _extraData);

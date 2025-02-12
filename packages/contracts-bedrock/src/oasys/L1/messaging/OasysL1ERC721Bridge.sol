@@ -4,20 +4,32 @@ pragma solidity 0.8.15;
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { L1ERC721Bridge } from "src/L1/L1ERC721Bridge.sol";
 import { ILegacyL1ERC721Bridge } from "src/oasys/L1/interfaces/ILegacyL1ERC721Bridge.sol";
+import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
+import { StandardBridge } from "src/universal/StandardBridge.sol";
+import { L2PredeployAddresses } from "src/oasys/L2/L2PredeployAddresses.sol";
 
 /// @title OasysL1ERC721Bridge
 /// @notice The OasysL1ERC721Bridge is a contract that adds compatibility with
 ///         the legacy L1ERC721Bridge implemented by Oasys to the official Optimism L1ERC721Bridge.
 contract OasysL1ERC721Bridge is L1ERC721Bridge, ILegacyL1ERC721Bridge {
-    /// @notice Constructs the OasysL1ERC721Bridge contract.
-    /// @param _messenger   Address of the CrossDomainMessenger on this network.
-    /// @param _otherBridge Address of the ERC721 bridge on the other network.
-    constructor(address _messenger, address _otherBridge) L1ERC721Bridge(_messenger, _otherBridge) { }
+    /// @notice Initializes the contract.
+    /// @param _messenger   Contract of the CrossDomainMessenger on this network.
+    /// @param _superchainConfig Contract of the SuperchainConfig contract on this network.
+    function initialize(CrossDomainMessenger _messenger, SuperchainConfig _superchainConfig) public override initializer {
+        superchainConfig = _superchainConfig;
+        __ERC721Bridge_init({
+            _messenger: _messenger,
+            // Note: The Oasys ERC721Bridge was released before Optimism's
+            //       resulting in different predeploy addresses on the L2 side.
+            _otherBridge: StandardBridge(payable(L2PredeployAddresses.L2_ERC721_BRIDGE))
+        });
+    }
 
     /// @custom:legacy
     /// @inheritdoc ILegacyL1ERC721Bridge
     function l2ERC721Bridge() external view returns (address) {
-        return OTHER_BRIDGE;
+        return address(otherBridge);
     }
 
     /// @custom:legacy

@@ -7,12 +7,12 @@ library Path {
     VmSafe private constant vm = VmSafe(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     function outDir() internal view returns (string memory) {
-        return string.concat(vm.projectRoot(), "/tmp/oasys/L1/build");
+        return string.concat(vm.projectRoot(), "/tmp/oasys/L1");
     }
 
     // Using from Deploy.s.sol;
     function deployOutDir() internal view returns (string memory) {
-        return string.concat(outDir(), "/Deploy.s.sol");
+        return string.concat(outDir(), "/build/Deploy.s.sol");
     }
 
     function deployLatestOutPath() internal view returns (string memory) {
@@ -25,7 +25,7 @@ library Path {
 
     // Using from Build.s.sol;
     function buildOutDir() internal view returns (string memory) {
-        return string.concat(outDir(), "/Build.s.sol");
+        return string.concat(outDir(), "/build/Build.s.sol");
     }
 
     function buildLatestOutDir() internal view returns (string memory) {
@@ -34,5 +34,18 @@ library Path {
 
     function buildRunOutDir() internal view returns (string memory) {
         return string.concat(buildOutDir(), "/run-", vm.toString(block.number));
+    }
+
+    // Using from UpgradeManager.s.sol;
+    function upgradeOutDir() internal view returns (string memory) {
+        return string.concat(outDir(), "/upgrade/UpgradeManager.s.sol");
+    }
+
+    function upgradeLatestOutDir() internal view returns (string memory) {
+        return string.concat(upgradeOutDir(), "/latest");
+    }
+
+    function upgradeRunOutDir() internal view returns (string memory) {
+        return string.concat(upgradeOutDir(), "/run-", vm.toString(block.number));
     }
 }

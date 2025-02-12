@@ -159,7 +159,7 @@ contract L2OutputOracle is Initializable, ISemver {
     ///                       All outputs after this output will also be deleted.
     // solhint-disable-next-line ordering
     function deleteL2Outputs(uint256 _l2OutputIndex) external virtual {
-        require(msg.sender == CHALLENGER, "L2OutputOracle: only the challenger address can delete outputs");
+        require(msg.sender == challenger, "L2OutputOracle: only the challenger address can delete outputs");
 
         // Make sure we're not *increasing* the length of the array.
         require(

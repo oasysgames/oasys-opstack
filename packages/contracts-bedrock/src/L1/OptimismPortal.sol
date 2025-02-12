@@ -102,7 +102,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     uint256 internal _balance;
 
     /// @notice Reserve extra slots (to a total of 50) in the storage layout for future upgrades.
-    uint256[46] private __gap;
+    uint256[38] private __gap;
 
     /// @notice Emitted when a transaction is deposited from L1 to L2.
     ///         The parameters of this event are read by the rollup node and used to derive deposit
@@ -153,7 +153,6 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         SuperchainConfig _superchainConfig
     )
         public
-        virtual
         initializer
     {
         l2Oracle = _l2Oracle;
@@ -599,6 +598,6 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @param _timestamp Timestamp to check.
     /// @return Whether or not the finalization period has elapsed.
     function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view virtual returns (bool) {
-        return block.timestamp > _timestamp + L2_ORACLE.FINALIZATION_PERIOD_SECONDS();
+        return block.timestamp > _timestamp + l2Oracle.FINALIZATION_PERIOD_SECONDS();
     }
 }
