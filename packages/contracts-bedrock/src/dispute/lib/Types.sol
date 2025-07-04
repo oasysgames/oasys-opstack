@@ -1,19 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import {
-    Position,
-    Hash,
-    GameType,
-    VMStatus,
-    Timestamp,
-    Duration,
-    Clock,
-    GameId,
-    Claim,
-    LibGameId,
-    LibClock
-} from "src/dispute/lib/LibUDT.sol";
+import "src/dispute/lib/LibUDT.sol";
 
 /// @notice The current status of the dispute game.
 enum GameStatus {

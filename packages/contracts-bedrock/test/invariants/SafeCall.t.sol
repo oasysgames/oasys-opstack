@@ -103,7 +103,10 @@ contract SafeCaller_Actor is StdUtils {
 
         vm.expectCallMinGas(to, value, minGas, hex"");
         bool success = SafeCall.call(
-            msg.sender, gas, value, abi.encodeCall(SafeCall_Succeeds_Invariants.performSafeCallMinGas, (to, minGas))
+            msg.sender,
+            gas,
+            value,
+            abi.encodeWithSelector(SafeCall_Succeeds_Invariants.performSafeCallMinGas.selector, to, minGas)
         );
 
         if (success && FAILS) numCalls++;

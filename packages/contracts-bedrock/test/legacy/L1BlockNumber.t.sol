@@ -5,29 +5,23 @@ pragma solidity 0.8.15;
 import { Test } from "forge-std/Test.sol";
 
 // Contracts
-import { IL1BlockNumber } from "src/legacy/interfaces/IL1BlockNumber.sol";
+import { L1BlockNumber } from "src/legacy/L1BlockNumber.sol";
 import { L1Block } from "src/L2/L1Block.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
 contract L1BlockNumberTest is Test {
     L1Block lb;
-    IL1BlockNumber bn;
+    L1BlockNumber bn;
 
     uint64 constant number = 99;
 
     /// @dev Sets up the test suite.
     function setUp() external {
-        vm.etch(Predeploys.L1_BLOCK_ATTRIBUTES, vm.getDeployedCode("L1Block.sol:L1Block"));
+        vm.etch(Predeploys.L1_BLOCK_ATTRIBUTES, address(new L1Block()).code);
         lb = L1Block(Predeploys.L1_BLOCK_ATTRIBUTES);
-        bn = IL1BlockNumber(
-            DeployUtils.create1({
-                _name: "L1BlockNumber",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1BlockNumber.__constructor__, ()))
-            })
-        );
+        bn = new L1BlockNumber();
         vm.prank(lb.DEPOSITOR_ACCOUNT());
 
         lb.setL1BlockValues({

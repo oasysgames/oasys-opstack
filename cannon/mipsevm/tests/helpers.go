@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
-	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/multithreaded"
 	mttestutil "github.com/ethereum-optimism/optimism/cannon/mipsevm/multithreaded/testutil"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/singlethreaded"
@@ -51,98 +50,37 @@ func multiThreadElfVmFactory(t require.TestingT, elfFile string, po mipsevm.Prei
 	return fpvm
 }
 
-type ProofGenerator func(t require.TestingT, state mipsevm.FPVMState, memoryProofAddresses ...arch.Word) []byte
-
-func singleThreadedProofGenerator(t require.TestingT, state mipsevm.FPVMState, memoryProofAddresses ...arch.Word) []byte {
-	var proofData []byte
-
-	insnProof := state.GetMemory().MerkleProof(state.GetPC())
-	proofData = append(proofData, insnProof[:]...)
-
-	for _, addr := range memoryProofAddresses {
-		memProof := state.GetMemory().MerkleProof(addr)
-		proofData = append(proofData, memProof[:]...)
-	}
-
-	return proofData
-}
-
-func multiThreadedProofGenerator(t require.TestingT, state mipsevm.FPVMState, memoryProofAddresses ...arch.Word) []byte {
-	mtState, ok := state.(*multithreaded.State)
-	if !ok {
-		require.Fail(t, "Failed to cast FPVMState to multithreaded State type")
-	}
-
-	proofData := mtState.EncodeThreadProof()
-	insnProof := mtState.GetMemory().MerkleProof(mtState.GetPC())
-	proofData = append(proofData, insnProof[:]...)
-
-	for _, addr := range memoryProofAddresses {
-		memProof := mtState.GetMemory().MerkleProof(addr)
-		proofData = append(proofData, memProof[:]...)
-	}
-
-	return proofData
-}
-
 type VersionedVMTestCase struct {
-	Name           string
-	Contracts      *testutil.ContractMetadata
-	StateHashFn    mipsevm.HashFn
-	VMFactory      VMFactory
-	ElfVMFactory   ElfVMFactory
-	ProofGenerator ProofGenerator
+	Name         string
+	Contracts    *testutil.ContractMetadata
+	StateHashFn  mipsevm.HashFn
+	VMFactory    VMFactory
+	ElfVMFactory ElfVMFactory
 }
 
 func GetSingleThreadedTestCase(t require.TestingT) VersionedVMTestCase {
 	return VersionedVMTestCase{
-		Name:           "single-threaded",
-		Contracts:      testutil.TestContractsSetup(t, testutil.MipsSingleThreaded),
-		StateHashFn:    singlethreaded.GetStateHashFn(),
-		VMFactory:      singleThreadedVmFactory,
-		ElfVMFactory:   singleThreadElfVmFactory,
-		ProofGenerator: singleThreadedProofGenerator,
+		Name:         "single-threaded",
+		Contracts:    testutil.TestContractsSetup(t, testutil.MipsSingleThreaded),
+		StateHashFn:  singlethreaded.GetStateHashFn(),
+		VMFactory:    singleThreadedVmFactory,
+		ElfVMFactory: singleThreadElfVmFactory,
 	}
 }
 
 func GetMultiThreadedTestCase(t require.TestingT) VersionedVMTestCase {
 	return VersionedVMTestCase{
-		Name:           "multi-threaded",
-		Contracts:      testutil.TestContractsSetup(t, testutil.MipsMultithreaded),
-		StateHashFn:    multithreaded.GetStateHashFn(),
-		VMFactory:      multiThreadedVmFactory,
-		ElfVMFactory:   multiThreadElfVmFactory,
-		ProofGenerator: multiThreadedProofGenerator,
+		Name:         "multi-threaded",
+		Contracts:    testutil.TestContractsSetup(t, testutil.MipsMultithreaded),
+		StateHashFn:  multithreaded.GetStateHashFn(),
+		VMFactory:    multiThreadedVmFactory,
+		ElfVMFactory: multiThreadElfVmFactory,
 	}
 }
 
 func GetMipsVersionTestCases(t require.TestingT) []VersionedVMTestCase {
-	if arch.IsMips32 {
-		return []VersionedVMTestCase{
-			GetSingleThreadedTestCase(t),
-			GetMultiThreadedTestCase(t),
-		}
-	} else {
-		// 64-bit only supports MTCannon
-		return []VersionedVMTestCase{
-			GetMultiThreadedTestCase(t),
-		}
-	}
-}
-
-type threadProofTestcase struct {
-	Name  string
-	Proof []byte
-}
-
-func GenerateEmptyThreadProofVariations(t require.TestingT) []threadProofTestcase {
-	defaultThreadProof := multiThreadedProofGenerator(t, multithreaded.CreateEmptyState())
-	zeroBytesThreadProof := make([]byte, multithreaded.THREAD_WITNESS_SIZE)
-	copy(zeroBytesThreadProof[multithreaded.SERIALIZED_THREAD_SIZE:], defaultThreadProof[multithreaded.SERIALIZED_THREAD_SIZE:])
-	nilBytesThreadProof := defaultThreadProof[multithreaded.SERIALIZED_THREAD_SIZE:]
-	return []threadProofTestcase{
-		{Name: "default thread proof", Proof: defaultThreadProof},
-		{Name: "zeroed thread bytes proof", Proof: zeroBytesThreadProof},
-		{Name: "nil thread bytes proof", Proof: nilBytesThreadProof},
+	return []VersionedVMTestCase{
+		GetSingleThreadedTestCase(t),
+		GetMultiThreadedTestCase(t),
 	}
 }

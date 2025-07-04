@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"net"
 	"slices"
-	gosync "sync"
 	"testing"
 	"time"
 
@@ -127,12 +126,9 @@ func TestP2PFull(t *testing.T) {
 
 	conns := make(chan network.Conn, 1)
 	hostA := nodeA.Host()
-	var once gosync.Once
 	hostA.Network().Notify(&network.NotifyBundle{
 		ConnectedF: func(n network.Network, conn network.Conn) {
-			once.Do(func() {
-				conns <- conn
-			})
+			conns <- conn
 		}})
 
 	backend := NewP2PAPIBackend(nodeA, logA, nil)

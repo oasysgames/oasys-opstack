@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import { DeploymentSummaryFaultProofs } from "./utils/DeploymentSummaryFaultProofs.sol";
+import { DeploymentSummary } from "./utils/DeploymentSummary.sol";
 import { KontrolUtils } from "./utils/KontrolUtils.sol";
 import { IL1CrossDomainMessenger as L1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { ISuperchainConfig as SuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
 
-contract L1CrossDomainMessengerKontrol is DeploymentSummaryFaultProofs, KontrolUtils {
+contract L1CrossDomainMessengerKontrol is DeploymentSummary, KontrolUtils {
     L1CrossDomainMessenger l1CrossDomainMessenger;
     SuperchainConfig superchainConfig;
 

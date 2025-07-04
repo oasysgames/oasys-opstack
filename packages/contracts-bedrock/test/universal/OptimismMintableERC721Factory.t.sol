@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { CommonTest } from "test/setup/CommonTest.sol";
+import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import { Bridge_Initializer } from "test/setup/Bridge_Initializer.sol";
 import { OptimismMintableERC721 } from "src/universal/OptimismMintableERC721.sol";
 import { OptimismMintableERC721Factory } from "src/universal/OptimismMintableERC721Factory.sol";
 
-contract OptimismMintableERC721Factory_Test is CommonTest {
+contract OptimismMintableERC721Factory_Test is Bridge_Initializer {
     event OptimismMintableERC721Created(address indexed localToken, address indexed remoteToken, address deployer);
 
     function test_constructor_succeeds() external view {

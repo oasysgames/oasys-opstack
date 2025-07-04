@@ -33,13 +33,13 @@ func run() error {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	var hasErr atomic.Bool
+	var hasErr int32
 	var outMtx sync.Mutex
 	fail := func(msg string, args ...any) {
 		outMtx.Lock()
 		writeStderr("❌  "+msg, args...)
 		outMtx.Unlock()
-		hasErr.Store(true)
+		atomic.StoreInt32(&hasErr, 1)
 	}
 
 	dirs := []string{"src", "scripts", "test"}
@@ -74,7 +74,7 @@ func run() error {
 		sem <- struct{}{}
 	}
 
-	if hasErr.Load() {
+	if atomic.LoadInt32(&hasErr) == 1 {
 		return errors.New("unused imports check failed, see logs above")
 	}
 

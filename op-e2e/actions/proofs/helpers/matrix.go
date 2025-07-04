@@ -84,17 +84,13 @@ var (
 	Regolith = &Hardfork{Name: "Regolith", Precedence: 1}
 	Canyon   = &Hardfork{Name: "Canyon", Precedence: 2}
 	Delta    = &Hardfork{Name: "Delta", Precedence: 3}
-	Ecotone  = &Hardfork{Name: "Ecotone", Precedence: 4}
-	Fjord    = &Hardfork{Name: "Fjord", Precedence: 5}
+	Fjord    = &Hardfork{Name: "Fjord", Precedence: 4}
+	Ecotone  = &Hardfork{Name: "Ecotone", Precedence: 5}
 	Granite  = &Hardfork{Name: "Granite", Precedence: 6}
-	Holocene = &Hardfork{Name: "Holocene", Precedence: 7}
 )
+var Hardforks = ForkMatrix{Regolith, Canyon, Delta, Fjord, Ecotone, Granite}
 
-var (
-	Hardforks      = ForkMatrix{Regolith, Canyon, Delta, Ecotone, Fjord, Granite, Holocene}
-	LatestFork     = Hardforks[len(Hardforks)-1]
-	LatestForkOnly = ForkMatrix{LatestFork}
-)
+var LatestForkOnly = ForkMatrix{Hardforks[len(Hardforks)-1]}
 
 func NewForkMatrix(forks ...*Hardfork) ForkMatrix {
 	return append(ForkMatrix{}, forks...)

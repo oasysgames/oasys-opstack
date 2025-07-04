@@ -5,20 +5,14 @@ pragma solidity 0.8.15;
 import { Test } from "forge-std/Test.sol";
 
 // Target contract
-import { IDeployerWhitelist } from "src/legacy/interfaces/IDeployerWhitelist.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
+import { DeployerWhitelist } from "src/legacy/DeployerWhitelist.sol";
 
 contract DeployerWhitelist_Test is Test {
-    IDeployerWhitelist list;
+    DeployerWhitelist list;
 
     /// @dev Sets up the test suite.
     function setUp() public {
-        list = IDeployerWhitelist(
-            DeployUtils.create1({
-                _name: "DeployerWhitelist",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IDeployerWhitelist.__constructor__, ()))
-            })
-        );
+        list = new DeployerWhitelist();
     }
 
     /// @dev Tests that `owner` is initialized to the zero address.

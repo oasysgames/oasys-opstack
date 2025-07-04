@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 // Contracts
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 // Interfaces
 import { IGovernanceToken } from "src/governance/interfaces/IGovernanceToken.sol";

@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -11,7 +10,6 @@ import (
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/memory"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/multithreaded"
-	"github.com/ethereum-optimism/optimism/cannon/mipsevm/testutil"
 )
 
 // ExpectedMTState is a test utility that basically stores a copy of a state that can be explicitly mutated
@@ -20,7 +18,7 @@ type ExpectedMTState struct {
 	PreimageKey         common.Hash
 	PreimageOffset      arch.Word
 	Heap                arch.Word
-	LLReservationStatus multithreaded.LLReservationStatus
+	LLReservationActive bool
 	LLAddress           arch.Word
 	LLOwnerThread       arch.Word
 	ExitCode            uint8
@@ -71,7 +69,7 @@ func NewExpectedMTState(fromState *multithreaded.State) *ExpectedMTState {
 		PreimageKey:         fromState.GetPreimageKey(),
 		PreimageOffset:      fromState.GetPreimageOffset(),
 		Heap:                fromState.GetHeap(),
-		LLReservationStatus: fromState.LLReservationStatus,
+		LLReservationActive: fromState.LLReservationActive,
 		LLAddress:           fromState.LLAddress,
 		LLOwnerThread:       fromState.LLOwnerThread,
 		ExitCode:            fromState.GetExitCode(),
@@ -121,20 +119,19 @@ func (e *ExpectedMTState) ExpectStep() {
 	e.StepsSinceLastContextSwitch += 1
 }
 
-func (e *ExpectedMTState) ExpectMemoryWriteUint32(t require.TestingT, addr arch.Word, val uint32) {
-	// Align address to 4-byte boundaries
-	addr = addr & ^arch.Word(3)
-
-	// Set 4 bytes at addr
-	data := testutil.Uint32ToBytes(val)
-	err := e.expectedMemory.SetMemoryRange(addr, bytes.NewReader(data))
-	require.NoError(t, err)
-
+func (e *ExpectedMTState) ExpectMemoryWrite(addr arch.Word, val uint32) {
+	e.expectedMemory.SetUint32(addr, val)
 	e.MemoryRoot = e.expectedMemory.MerkleRoot()
 }
 
 func (e *ExpectedMTState) ExpectMemoryWordWrite(addr arch.Word, val arch.Word) {
 	e.expectedMemory.SetWord(addr, val)
+	e.MemoryRoot = e.expectedMemory.MerkleRoot()
+}
+
+func (e *ExpectedMTState) ExpectMemoryWriteMultiple(addr arch.Word, val uint32, addr2 arch.Word, val2 uint32) {
+	e.expectedMemory.SetUint32(addr, val)
+	e.expectedMemory.SetUint32(addr2, val2)
 	e.MemoryRoot = e.expectedMemory.MerkleRoot()
 }
 
@@ -183,7 +180,7 @@ func (e *ExpectedMTState) Validate(t require.TestingT, actualState *multithreade
 	require.Equalf(t, e.PreimageKey, actualState.GetPreimageKey(), "Expect preimageKey = %v", e.PreimageKey)
 	require.Equalf(t, e.PreimageOffset, actualState.GetPreimageOffset(), "Expect preimageOffset = %v", e.PreimageOffset)
 	require.Equalf(t, e.Heap, actualState.GetHeap(), "Expect heap = 0x%x", e.Heap)
-	require.Equalf(t, e.LLReservationStatus, actualState.LLReservationStatus, "Expect LLReservationStatus = %v", e.LLReservationStatus)
+	require.Equalf(t, e.LLReservationActive, actualState.LLReservationActive, "Expect LLReservationActive = %v", e.LLReservationActive)
 	require.Equalf(t, e.LLAddress, actualState.LLAddress, "Expect LLAddress = 0x%x", e.LLAddress)
 	require.Equalf(t, e.LLOwnerThread, actualState.LLOwnerThread, "Expect LLOwnerThread = %v", e.LLOwnerThread)
 	require.Equalf(t, e.ExitCode, actualState.GetExitCode(), "Expect exitCode = 0x%x", e.ExitCode)

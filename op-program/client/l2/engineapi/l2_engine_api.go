@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -45,11 +44,6 @@ type EngineBackend interface {
 	SetSafe(header *types.Header)
 
 	consensus.ChainHeaderReader
-}
-
-type CachingEngineBackend interface {
-	EngineBackend
-	AssembleAndInsertBlockWithoutSetHead(processor *BlockProcessor) (*types.Block, error)
 }
 
 // L2EngineAPI wraps an engine actor, and implements the RPC backend required to serve the engine API.
@@ -101,9 +95,6 @@ func computePayloadId(headBlockHash common.Hash, attrs *eth.PayloadAttributes) e
 		hasher.Write(tx)
 	}
 	_ = binary.Write(hasher, binary.BigEndian, *attrs.GasLimit)
-	if attrs.EIP1559Params != nil {
-		hasher.Write(attrs.EIP1559Params[:])
-	}
 	var out engine.PayloadID
 	copy(out[:], hasher.Sum(nil)[:8])
 	return out
@@ -130,9 +121,9 @@ func (ea *L2EngineAPI) IncludeTx(tx *types.Transaction, from common.Address) err
 	if ea.blockProcessor == nil {
 		return ErrNotBuildingBlock
 	}
-
 	if ea.l2ForceEmpty {
 		ea.log.Info("Skipping including a transaction because e.L2ForceEmpty is true")
+		// t.InvalidAction("cannot include any sequencer txs")
 		return nil
 	}
 
@@ -159,7 +150,6 @@ func (ea *L2EngineAPI) startBlock(parent common.Hash, attrs *eth.PayloadAttribut
 	if err != nil {
 		return err
 	}
-
 	ea.blockProcessor = processor
 	ea.pendingIndices = make(map[common.Address]uint64)
 	ea.l2ForceEmpty = attrs.NoTxPool
@@ -187,18 +177,7 @@ func (ea *L2EngineAPI) endBlock() (*types.Block, error) {
 	processor := ea.blockProcessor
 	ea.blockProcessor = nil
 
-	var block *types.Block
-	var err error
-	// If the backend supports it, write the newly created block to the database without making it canonical.
-	// This avoids needing to reprocess the block if it is sent back via newPayload.
-	// The block is not made canonical so if it is never sent back via newPayload worst case it just wastes some storage
-	// In the context of the OP Stack derivation, the created block is always immediately imported so it makes sense to
-	// optimise.
-	if cachingBackend, ok := ea.backend.(CachingEngineBackend); ok {
-		block, err = cachingBackend.AssembleAndInsertBlockWithoutSetHead(processor)
-	} else {
-		block, err = processor.Assemble()
-	}
+	block, err := processor.Assemble()
 	if err != nil {
 		return nil, fmt.Errorf("assemble block: %w", err)
 	}
@@ -261,26 +240,14 @@ func (ea *L2EngineAPI) ForkchoiceUpdatedV3(ctx context.Context, state *eth.Forkc
 // Ported from: https://github.com/ethereum-optimism/op-geth/blob/c50337a60a1309a0f1dca3bf33ed1bb38c46cdd7/eth/catalyst/api.go#L206-L218
 func (ea *L2EngineAPI) verifyPayloadAttributes(attr *eth.PayloadAttributes) error {
 	c := ea.config()
-	t := uint64(attr.Timestamp)
 
 	// Verify withdrawals attribute for Shanghai.
-	if err := checkAttribute(c.IsShanghai, attr.Withdrawals != nil, c.LondonBlock, t); err != nil {
+	if err := checkAttribute(c.IsShanghai, attr.Withdrawals != nil, c.LondonBlock, uint64(attr.Timestamp)); err != nil {
 		return fmt.Errorf("invalid withdrawals: %w", err)
 	}
 	// Verify beacon root attribute for Cancun.
-	if err := checkAttribute(c.IsCancun, attr.ParentBeaconBlockRoot != nil, c.LondonBlock, t); err != nil {
+	if err := checkAttribute(c.IsCancun, attr.ParentBeaconBlockRoot != nil, c.LondonBlock, uint64(attr.Timestamp)); err != nil {
 		return fmt.Errorf("invalid parent beacon block root: %w", err)
-	}
-	// Verify EIP-1559 params for Holocene.
-	if c.IsHolocene(t) {
-		if attr.EIP1559Params == nil {
-			return errors.New("got nil eip-1559 params while Holocene is active")
-		}
-		if err := eip1559.ValidateHolocene1559Params(attr.EIP1559Params[:]); err != nil {
-			return fmt.Errorf("invalid Holocene params: %w", err)
-		}
-	} else if attr.EIP1559Params != nil {
-		return errors.New("got Holocene params though fork not active")
 	}
 
 	return nil
@@ -335,13 +302,6 @@ func (ea *L2EngineAPI) NewPayloadV3(ctx context.Context, params *eth.ExecutionPa
 		return &eth.PayloadStatusV1{Status: eth.ExecutionInvalid}, engine.UnsupportedFork.With(errors.New("newPayloadV3 called pre-cancun"))
 	}
 
-	// Payload must have eip-1559 params in ExtraData after Holocene
-	if ea.config().IsHolocene(uint64(params.Timestamp)) {
-		if err := eip1559.ValidateHoloceneExtraData(params.ExtraData); err != nil {
-			return &eth.PayloadStatusV1{Status: eth.ExecutionInvalid}, engine.UnsupportedFork.With(errors.New("invalid holocene extraData post-holoocene"))
-		}
-	}
-
 	return ea.newPayload(ctx, params, versionedHashes, beaconRoot)
 }
 
@@ -357,7 +317,7 @@ func (ea *L2EngineAPI) getPayload(_ context.Context, payloadId eth.PayloadID) (*
 		return nil, engine.UnknownPayload
 	}
 
-	return eth.BlockAsPayloadEnv(bl, ea.config().ShanghaiTime)
+	return eth.BlockAsPayloadEnv(bl, ea.config().CanyonTime)
 }
 
 func (ea *L2EngineAPI) forkchoiceUpdated(_ context.Context, state *eth.ForkchoiceState, attr *eth.PayloadAttributes) (*eth.ForkchoiceUpdatedResult, error) {
@@ -511,17 +471,17 @@ func (ea *L2EngineAPI) newPayload(_ context.Context, payload *eth.ExecutionPaylo
 	// If we already have the block locally, ignore the entire execution and just
 	// return a fake success.
 	if block := ea.backend.GetBlock(payload.BlockHash, uint64(payload.BlockNumber)); block != nil {
-		ea.log.Info("Using existing beacon payload", "number", payload.BlockNumber, "hash", payload.BlockHash, "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)))
+		ea.log.Warn("Ignoring already known beacon payload", "number", payload.BlockNumber, "hash", payload.BlockHash, "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)))
 		hash := block.Hash()
 		return &eth.PayloadStatusV1{Status: eth.ExecutionValid, LatestValidHash: &hash}, nil
 	}
 
-	// Skip invalid ancestor check (i.e. not remembering previously failed blocks)
+	// TODO: skipping invalid ancestor check (i.e. not remembering previously failed blocks)
 
 	parent := ea.backend.GetBlock(block.ParentHash(), block.NumberU64()-1)
 	if parent == nil {
 		ea.remotes[block.Hash()] = block
-		// Return accepted if we don't know the parent block. Note that there's no actual sync to activate.
+		// TODO: hack, saying we accepted if we don't know the parent block. Might want to return critical error if we can't actually sync.
 		return &eth.PayloadStatusV1{Status: eth.ExecutionAccepted, LatestValidHash: nil}, nil
 	}
 
@@ -537,7 +497,7 @@ func (ea *L2EngineAPI) newPayload(_ context.Context, payload *eth.ExecutionPaylo
 	log.Trace("Inserting block without sethead", "hash", block.Hash(), "number", block.Number)
 	if _, err := ea.backend.InsertBlockWithoutSetHead(block, false); err != nil {
 		ea.log.Warn("NewPayloadV1: inserting block failed", "error", err)
-		// Skip remembering the block was invalid, but do return the invalid response.
+		// TODO not remembering the payload as invalid
 		return ea.invalid(err, parent.Header()), nil
 	}
 	hash := block.Hash()

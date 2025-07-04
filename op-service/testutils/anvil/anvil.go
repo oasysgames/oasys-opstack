@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -22,6 +21,8 @@ func Test(t *testing.T) {
 	}
 }
 
+const AnvilPort = 31967
+
 type Runner struct {
 	proc      *exec.Cmd
 	stdout    io.ReadCloser
@@ -29,7 +30,6 @@ type Runner struct {
 	logger    log.Logger
 	startedCh chan struct{}
 	wg        sync.WaitGroup
-	port      int32
 }
 
 func New(l1RPCURL string, logger log.Logger) (*Runner, error) {
@@ -37,7 +37,7 @@ func New(l1RPCURL string, logger log.Logger) (*Runner, error) {
 		"anvil",
 		"--fork-url", l1RPCURL,
 		"--port",
-		"0",
+		strconv.Itoa(AnvilPort),
 	)
 	stdout, err := proc.StdoutPipe()
 	if err != nil {
@@ -88,20 +88,15 @@ func (r *Runner) Stop() error {
 func (r *Runner) outputStream(stream io.ReadCloser) {
 	defer r.wg.Done()
 	scanner := bufio.NewScanner(stream)
-	listenLine := "Listening on 127.0.0.1"
+	listenLine := fmt.Sprintf("Listening on 127.0.0.1:%d", AnvilPort)
+	started := sync.OnceFunc(func() {
+		r.startedCh <- struct{}{}
+	})
 
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		if strings.Contains(line, listenLine) && atomic.LoadInt32(&r.port) == 0 {
-			split := strings.Split(line, ":")
-			port, err := strconv.Atoi(strings.TrimSpace(split[len(split)-1]))
-			if err == nil {
-				atomic.StoreInt32(&r.port, int32(port))
-				r.startedCh <- struct{}{}
-			} else {
-				r.logger.Error("failed to parse port from Anvil output", "err", err)
-			}
+		if strings.Contains(line, listenLine) {
+			started()
 		}
 
 		r.logger.Debug("[ANVIL] " + scanner.Text())
@@ -109,10 +104,5 @@ func (r *Runner) outputStream(stream io.ReadCloser) {
 }
 
 func (r *Runner) RPCUrl() string {
-	port := atomic.LoadInt32(&r.port)
-	if port == 0 {
-		panic("anvil not started")
-	}
-
-	return fmt.Sprintf("http://localhost:%d", port)
+	return fmt.Sprintf("http://localhost:%d", AnvilPort)
 }

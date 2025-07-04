@@ -9,34 +9,71 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-type EntryStore[T EntryType, E Entry[T]] interface {
-	Size() int64
-	LastEntryIdx() EntryIdx
-	Read(idx EntryIdx) (E, error)
-	Append(entries ...E) error
-	Truncate(idx EntryIdx) error
-	Close() error
-}
+const (
+	EntrySize = 34
+)
 
 type EntryIdx int64
 
-type EntryType interface {
-	String() string
-	~uint8
+type Entry [EntrySize]byte
+
+func (entry Entry) Type() EntryType {
+	return EntryType(entry[0])
 }
 
-type Entry[T EntryType] interface {
-	Type() T
-	comparable
+type EntryTypeFlag uint8
+
+const (
+	FlagSearchCheckpoint EntryTypeFlag = 1 << TypeSearchCheckpoint
+	FlagCanonicalHash    EntryTypeFlag = 1 << TypeCanonicalHash
+	FlagInitiatingEvent  EntryTypeFlag = 1 << TypeInitiatingEvent
+	FlagExecutingLink    EntryTypeFlag = 1 << TypeExecutingLink
+	FlagExecutingCheck   EntryTypeFlag = 1 << TypeExecutingCheck
+	FlagPadding          EntryTypeFlag = 1 << TypePadding
+	// for additional padding
+	FlagPadding2 EntryTypeFlag = FlagPadding << 1
+)
+
+func (ex EntryTypeFlag) Any(v EntryTypeFlag) bool {
+	return ex&v != 0
 }
 
-// Binary is the binary interface to encode/decode/size entries.
-// This should be a zero-cost abstraction, and is bundled as interface for the EntryDB
-// to have generic access to this functionality without const-generics for array size in Go.
-type Binary[T EntryType, E Entry[T]] interface {
-	Append(dest []byte, e *E) []byte
-	ReadAt(dest *E, r io.ReaderAt, at int64) (n int, err error)
-	EntrySize() int
+func (ex *EntryTypeFlag) Add(v EntryTypeFlag) {
+	*ex = *ex | v
+}
+
+func (ex *EntryTypeFlag) Remove(v EntryTypeFlag) {
+	*ex = *ex &^ v
+}
+
+type EntryType uint8
+
+const (
+	TypeSearchCheckpoint EntryType = iota
+	TypeCanonicalHash
+	TypeInitiatingEvent
+	TypeExecutingLink
+	TypeExecutingCheck
+	TypePadding
+)
+
+func (d EntryType) String() string {
+	switch d {
+	case TypeSearchCheckpoint:
+		return "searchCheckpoint"
+	case TypeCanonicalHash:
+		return "canonicalHash"
+	case TypeInitiatingEvent:
+		return "initiatingEvent"
+	case TypeExecutingLink:
+		return "executingLink"
+	case TypeExecutingCheck:
+		return "executingCheck"
+	case TypePadding:
+		return "padding"
+	default:
+		return fmt.Sprintf("unknown-%d", uint8(d))
+	}
 }
 
 // dataAccess defines a minimal API required to manipulate the actual stored data.
@@ -48,11 +85,9 @@ type dataAccess interface {
 	Truncate(size int64) error
 }
 
-type EntryDB[T EntryType, E Entry[T], B Binary[T, E]] struct {
+type EntryDB struct {
 	data         dataAccess
 	lastEntryIdx EntryIdx
-
-	b B
 
 	cleanupFailedWrite bool
 }
@@ -62,7 +97,7 @@ type EntryDB[T EntryType, E Entry[T], B Binary[T, E]] struct {
 // If the file exists it will be used as the existing data.
 // Returns ErrRecoveryRequired if the existing file is not a valid entry db. A EntryDB is still returned but all
 // operations will return ErrRecoveryRequired until the Recover method is called.
-func NewEntryDB[T EntryType, E Entry[T], B Binary[T, E]](logger log.Logger, path string) (*EntryDB[T, E, B], error) {
+func NewEntryDB(logger log.Logger, path string) (*EntryDB, error) {
 	logger.Info("Opening entry database", "path", path)
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
@@ -72,14 +107,13 @@ func NewEntryDB[T EntryType, E Entry[T], B Binary[T, E]](logger log.Logger, path
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat database at %v: %w", path, err)
 	}
-	var b B
-	size := info.Size() / int64(b.EntrySize())
-	db := &EntryDB[T, E, B]{
+	size := info.Size() / EntrySize
+	db := &EntryDB{
 		data:         file,
 		lastEntryIdx: EntryIdx(size - 1),
 	}
-	if size*int64(b.EntrySize()) != info.Size() {
-		logger.Warn("File size is not a multiple of entry size. Truncating to last complete entry", "fileSize", size, "entrySize", b.EntrySize())
+	if size*EntrySize != info.Size() {
+		logger.Warn("File size is not a multiple of entry size. Truncating to last complete entry", "fileSize", size, "entrySize", EntrySize)
 		if err := db.recover(); err != nil {
 			return nil, fmt.Errorf("failed to recover database at %v: %w", path, err)
 		}
@@ -87,26 +121,24 @@ func NewEntryDB[T EntryType, E Entry[T], B Binary[T, E]](logger log.Logger, path
 	return db, nil
 }
 
-func (e *EntryDB[T, E, B]) Size() int64 {
+func (e *EntryDB) Size() int64 {
 	return int64(e.lastEntryIdx) + 1
 }
 
-// LastEntryIdx returns the index of the last entry in the DB.
-// This returns -1 if the DB is empty.
-func (e *EntryDB[T, E, B]) LastEntryIdx() EntryIdx {
+func (e *EntryDB) LastEntryIdx() EntryIdx {
 	return e.lastEntryIdx
 }
 
 // Read an entry from the database by index. Returns io.EOF iff idx is after the last entry.
-func (e *EntryDB[T, E, B]) Read(idx EntryIdx) (E, error) {
-	var out E
+func (e *EntryDB) Read(idx EntryIdx) (Entry, error) {
 	if idx > e.lastEntryIdx {
-		return out, io.EOF
+		return Entry{}, io.EOF
 	}
-	read, err := e.b.ReadAt(&out, e.data, int64(idx)*int64(e.b.EntrySize()))
+	var out Entry
+	read, err := e.data.ReadAt(out[:], int64(idx)*EntrySize)
 	// Ignore io.EOF if we read the entire last entry as ReadAt may return io.EOF or nil when it reads the last byte
-	if err != nil && !(errors.Is(err, io.EOF) && read == e.b.EntrySize()) {
-		return out, fmt.Errorf("failed to read entry %v: %w", idx, err)
+	if err != nil && !(errors.Is(err, io.EOF) && read == EntrySize) {
+		return Entry{}, fmt.Errorf("failed to read entry %v: %w", idx, err)
 	}
 	return out, nil
 }
@@ -115,16 +147,16 @@ func (e *EntryDB[T, E, B]) Read(idx EntryIdx) (E, error) {
 // The entries are combined in memory and passed to a single Write invocation.
 // If the write fails, it will attempt to truncate any partially written data.
 // Subsequent writes to this instance will fail until partially written data is truncated.
-func (e *EntryDB[T, E, B]) Append(entries ...E) error {
+func (e *EntryDB) Append(entries ...Entry) error {
 	if e.cleanupFailedWrite {
 		// Try to rollback partially written data from a previous Append
 		if truncateErr := e.Truncate(e.lastEntryIdx); truncateErr != nil {
 			return fmt.Errorf("failed to recover from previous write error: %w", truncateErr)
 		}
 	}
-	data := make([]byte, 0, len(entries)*e.b.EntrySize())
-	for i := range entries {
-		data = e.b.Append(data, &entries[i])
+	data := make([]byte, 0, len(entries)*EntrySize)
+	for _, entry := range entries {
+		data = append(data, entry[:]...)
 	}
 	if n, err := e.data.Write(data); err != nil {
 		if n == 0 {
@@ -145,8 +177,8 @@ func (e *EntryDB[T, E, B]) Append(entries ...E) error {
 }
 
 // Truncate the database so that the last retained entry is idx. Any entries after idx are deleted.
-func (e *EntryDB[T, E, B]) Truncate(idx EntryIdx) error {
-	if err := e.data.Truncate((int64(idx) + 1) * int64(e.b.EntrySize())); err != nil {
+func (e *EntryDB) Truncate(idx EntryIdx) error {
+	if err := e.data.Truncate((int64(idx) + 1) * EntrySize); err != nil {
 		return fmt.Errorf("failed to truncate to entry %v: %w", idx, err)
 	}
 	// Update the lastEntryIdx cache
@@ -156,13 +188,13 @@ func (e *EntryDB[T, E, B]) Truncate(idx EntryIdx) error {
 }
 
 // recover an invalid database by truncating back to the last complete event.
-func (e *EntryDB[T, E, B]) recover() error {
-	if err := e.data.Truncate(e.Size() * int64(e.b.EntrySize())); err != nil {
+func (e *EntryDB) recover() error {
+	if err := e.data.Truncate((e.Size()) * EntrySize); err != nil {
 		return fmt.Errorf("failed to truncate trailing partial entries: %w", err)
 	}
 	return nil
 }
 
-func (e *EntryDB[T, E, B]) Close() error {
+func (e *EntryDB) Close() error {
 	return e.data.Close()
 }

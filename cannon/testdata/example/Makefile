@@ -1,22 +1,13 @@
 all: elf
 
-.PHONY: elf32
-elf32: $(patsubst %/go.mod,bin/%.elf,$(wildcard */go.mod))
-
-.PHONY: elf64
-elf64: $(patsubst %/go.mod,bin/%.64.elf,$(wildcard */go.mod))
-
 .PHONY: elf
-elf: elf32 elf64
+elf: $(patsubst %/go.mod,bin/%.elf,$(wildcard */go.mod))
 
 .PHONY: dump
 dump: $(patsubst %/go.mod,bin/%.dump,$(wildcard */go.mod))
 
 bin:
 	mkdir bin
-
-bin/%.64.elf: bin
-	cd $(@:bin/%.64.elf=%) && GOOS=linux GOARCH=mips64 GOMIPS64=softfloat go build -o ../$@ .
 
 # take any directory with a go mod, and build an ELF
 # verify output with: readelf -h bin/<name>.elf

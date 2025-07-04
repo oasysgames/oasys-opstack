@@ -68,18 +68,6 @@ func WithPCAndNextPC(pc arch.Word) StateOption {
 	}
 }
 
-func WithHI(hi arch.Word) StateOption {
-	return func(state StateMutator) {
-		state.SetHI(hi)
-	}
-}
-
-func WithLO(lo arch.Word) StateOption {
-	return func(state StateMutator) {
-		state.SetLO(lo)
-	}
-}
-
 func WithHeap(addr arch.Word) StateOption {
 	return func(state StateMutator) {
 		state.SetHeap(addr)
@@ -119,7 +107,7 @@ func WithRandomization(seed int64) StateOption {
 func AlignPC(pc arch.Word) arch.Word {
 	// Memory-align random pc and leave room for nextPC
 	pc = pc & arch.AddressMask // Align address
-	if pc >= arch.AddressMask {
+	if pc >= arch.AddressMask && arch.IsMips32 {
 		// Leave room to set and then increment nextPC
 		pc = arch.AddressMask - 8
 	}
@@ -177,8 +165,8 @@ func (e *ExpectedState) ExpectStep() {
 	e.NextPC += 4
 }
 
-func (e *ExpectedState) ExpectMemoryWriteWord(addr arch.Word, val arch.Word) {
-	e.expectedMemory.SetWord(addr, val)
+func (e *ExpectedState) ExpectMemoryWrite(addr arch.Word, val uint32) {
+	e.expectedMemory.SetUint32(addr, val)
 	e.MemoryRoot = e.expectedMemory.MerkleRoot()
 }
 

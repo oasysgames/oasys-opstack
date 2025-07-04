@@ -73,14 +73,15 @@ func (d *Driver) Emit(ev event.Event) {
 	d.events = append(d.events, ev)
 }
 
+var ExhaustErr = errors.New("exhausted events before completing program")
+
 func (d *Driver) RunComplete() error {
 	// Initial reset
 	d.Emit(engine.ResetEngineRequestEvent{})
 
 	for !d.end.Closing() {
 		if len(d.events) == 0 {
-			d.logger.Info("Derivation complete: no further data to process")
-			return d.end.Result()
+			return ExhaustErr
 		}
 		if len(d.events) > 10000 { // sanity check, in case of bugs. Better than going OOM.
 			return errors.New("way too many events queued up, something is wrong")

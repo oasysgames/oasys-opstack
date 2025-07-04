@@ -59,8 +59,8 @@ func (m *InstrumentedState) handleSyscall() error {
 
 		newThread.Registers[29] = a1
 		// the child will perceive a 0 value as returned value instead, and no error
-		newThread.Registers[exec.RegSyscallRet1] = 0
-		newThread.Registers[exec.RegSyscallErrno] = 0
+		newThread.Registers[2] = 0
+		newThread.Registers[7] = 0
 		m.state.NextThreadId++
 
 		// Preempt this thread for the new one. But not before updating PCs
@@ -168,9 +168,9 @@ func (m *InstrumentedState) handleSyscall() error {
 			m.memoryTracker.TrackMemAccess(effAddr)
 			m.state.Memory.SetWord(effAddr, secs)
 			m.handleMemoryUpdate(effAddr)
-			m.memoryTracker.TrackMemAccess2(effAddr + arch.WordSizeBytes)
-			m.state.Memory.SetWord(effAddr+arch.WordSizeBytes, nsecs)
-			m.handleMemoryUpdate(effAddr + arch.WordSizeBytes)
+			m.memoryTracker.TrackMemAccess2(effAddr + 4)
+			m.state.Memory.SetWord(effAddr+4, nsecs)
+			m.handleMemoryUpdate(effAddr + 4)
 		default:
 			v0 = exec.SysErrorSignal
 			v1 = exec.MipsEINVAL
@@ -187,7 +187,6 @@ func (m *InstrumentedState) handleSyscall() error {
 	case arch.SysPrlimit64:
 	case arch.SysClose:
 	case arch.SysPread64:
-	case arch.SysStat:
 	case arch.SysFstat:
 	case arch.SysOpenAt:
 	case arch.SysReadlink:
@@ -207,8 +206,6 @@ func (m *InstrumentedState) handleSyscall() error {
 	case arch.SysTimerCreate:
 	case arch.SysTimerSetTime:
 	case arch.SysTimerDelete:
-	case arch.SysGetRLimit:
-	case arch.SysLseek:
 	default:
 		// These syscalls have the same values on 64-bit. So we use if-stmts here to avoid "duplicate case" compiler error for the cannon64 build
 		if arch.IsMips32 && syscallNum == arch.SysFstat64 || syscallNum == arch.SysStat64 || syscallNum == arch.SysLlseek {
@@ -224,23 +221,6 @@ func (m *InstrumentedState) handleSyscall() error {
 }
 
 func (m *InstrumentedState) mipsStep() error {
-	err := m.doMipsStep()
-	if err != nil {
-		return err
-	}
-
-	m.assertPostStateChecks()
-	return err
-}
-
-func (m *InstrumentedState) assertPostStateChecks() {
-	activeStack := m.state.getActiveThreadStack()
-	if len(activeStack) == 0 {
-		panic("post-state active thread stack is empty")
-	}
-}
-
-func (m *InstrumentedState) doMipsStep() error {
 	if m.state.Exited {
 		return nil
 	}
@@ -333,26 +313,26 @@ func (m *InstrumentedState) doMipsStep() error {
 	}
 
 	// Exec the rest of the step logic
-	memUpdated, effMemAddr, err := exec.ExecMipsCoreStepLogic(m.state.getCpuRef(), m.state.GetRegistersRef(), m.state.Memory, insn, opcode, fun, m.memoryTracker, m.stackTracker)
+	memUpdated, memAddr, err := exec.ExecMipsCoreStepLogic(m.state.getCpuRef(), m.state.GetRegistersRef(), m.state.Memory, insn, opcode, fun, m.memoryTracker, m.stackTracker)
 	if err != nil {
 		return err
 	}
 	if memUpdated {
-		m.handleMemoryUpdate(effMemAddr)
+		m.handleMemoryUpdate(memAddr)
 	}
 
 	return nil
 }
 
-func (m *InstrumentedState) handleMemoryUpdate(effMemAddr Word) {
-	if effMemAddr == (arch.AddressMask & m.state.LLAddress) {
+func (m *InstrumentedState) handleMemoryUpdate(memAddr Word) {
+	if memAddr == m.state.LLAddress {
 		// Reserved address was modified, clear the reservation
 		m.clearLLMemoryReservation()
 	}
 }
 
 func (m *InstrumentedState) clearLLMemoryReservation() {
-	m.state.LLReservationStatus = LLStatusNone
+	m.state.LLReservationActive = false
 	m.state.LLAddress = 0
 	m.state.LLOwnerThread = 0
 }
@@ -363,40 +343,36 @@ func (m *InstrumentedState) handleRMWOps(insn, opcode uint32) error {
 	base := m.state.GetRegistersRef()[baseReg]
 	rtReg := Word((insn >> 16) & 0x1F)
 	offset := exec.SignExtendImmediate(insn)
-	addr := base + offset
 
-	// Determine some opcode-specific parameters
-	targetStatus := LLStatusActive32bit
-	byteLength := Word(4)
-	if opcode == exec.OpLoadLinked64 || opcode == exec.OpStoreConditional64 {
-		// Use 64-bit params
-		targetStatus = LLStatusActive64bit
-		byteLength = Word(8)
-	}
+	effAddr := (base + offset) & arch.AddressMask
+	m.memoryTracker.TrackMemAccess(effAddr)
+	mem := m.state.Memory.GetWord(effAddr)
 
 	var retVal Word
 	threadId := m.state.GetCurrentThread().ThreadId
-	switch opcode {
-	case exec.OpLoadLinked, exec.OpLoadLinked64:
-		retVal = exec.LoadSubWord(m.state.GetMemory(), addr, byteLength, true, m.memoryTracker)
-
-		m.state.LLReservationStatus = targetStatus
-		m.state.LLAddress = addr
+	if opcode == exec.OpLoadLinked || opcode == exec.OpLoadLinked64 {
+		retVal = mem
+		m.state.LLReservationActive = true
+		m.state.LLAddress = effAddr
 		m.state.LLOwnerThread = threadId
-	case exec.OpStoreConditional, exec.OpStoreConditional64:
-		if m.state.LLReservationStatus == targetStatus && m.state.LLOwnerThread == threadId && m.state.LLAddress == addr {
+	} else if opcode == exec.OpStoreConditional || opcode == exec.OpStoreConditional64 {
+		// TODO(#12205): Determine bits affected by coherence stores on 64-bits
+		// Check if our memory reservation is still intact
+		if m.state.LLReservationActive && m.state.LLOwnerThread == threadId && m.state.LLAddress == effAddr {
 			// Complete atomic update: set memory and return 1 for success
 			m.clearLLMemoryReservation()
-
-			val := m.state.GetRegistersRef()[rtReg]
-			exec.StoreSubWord(m.state.GetMemory(), addr, byteLength, val, m.memoryTracker)
-
+			rt := m.state.GetRegistersRef()[rtReg]
+			if opcode == exec.OpStoreConditional {
+				m.state.Memory.SetUint32(effAddr, uint32(rt))
+			} else {
+				m.state.Memory.SetWord(effAddr, rt)
+			}
 			retVal = 1
 		} else {
 			// Atomic update failed, return 0 for failure
 			retVal = 0
 		}
-	default:
+	} else {
 		panic(fmt.Sprintf("Invalid instruction passed to handleRMWOps (opcode %08x)", opcode))
 	}
 

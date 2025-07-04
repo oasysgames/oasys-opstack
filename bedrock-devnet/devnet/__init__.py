@@ -24,7 +24,7 @@ parser.add_argument('--allocs', help='Only create the allocs and exit', type=boo
 log = logging.getLogger()
 
 # Global constants
-FORKS = ["delta", "ecotone", "fjord", "granite", "holocene"]
+FORKS = ["delta", "ecotone", "fjord", "granite"]
 
 # Global environment variables
 DEVNET_NO_BUILD = os.getenv('DEVNET_NO_BUILD') == "true"
@@ -259,8 +259,8 @@ def devnet_deploy(paths):
     # Selectively set the L2OO_ADDRESS or DGF_ADDRESS if using L2OO.
     # Must be done selectively because op-proposer throws if both are set.
     if DEVNET_L2OO:
-        l2_output_oracle = addresses['L2OutputOracleProxy']
         docker_env['L2OO_ADDRESS'] = l2_output_oracle
+        l2_output_oracle = addresses['L2OutputOracleProxy']
         log.info(f'Using L2OutputOracle {l2_output_oracle}')
     else:
         dispute_game_factory = addresses['DisputeGameFactoryProxy']

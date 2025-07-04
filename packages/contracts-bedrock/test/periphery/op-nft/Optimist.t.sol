@@ -130,7 +130,9 @@ contract Optimist_Initializer is Test {
     /// @notice Mocks the allowlistAttestor to always return true for a given address.
     function _mockAllowlistTrueFor(address _claimer) internal {
         vm.mockCall(
-            address(optimistAllowlist), abi.encodeCall(OptimistAllowlist.isAllowedToMint, (_claimer)), abi.encode(true)
+            address(optimistAllowlist),
+            abi.encodeWithSelector(OptimistAllowlist.isAllowedToMint.selector, _claimer),
+            abi.encode(true)
         );
 
         assertTrue(optimist.isOnAllowList(_claimer));
@@ -208,7 +210,7 @@ contract OptimistTest is Optimist_Initializer {
         assertTrue(optimistAllowlist.isAllowedToMint(bob));
 
         // Check that the OptimistAllowlist is checked
-        bytes memory data = abi.encodeCall(OptimistAllowlist.isAllowedToMint, (bob));
+        bytes memory data = abi.encodeWithSelector(optimistAllowlist.isAllowedToMint.selector, bob);
         vm.expectCall(address(optimistAllowlist), data);
 
         // mint an NFT and expect mint transfer event to be emitted
@@ -234,7 +236,7 @@ contract OptimistTest is Optimist_Initializer {
         assertTrue(optimistAllowlist.isAllowedToMint(bob));
 
         // Check that the OptimistAllowlist is checked
-        bytes memory data = abi.encodeCall(OptimistAllowlist.isAllowedToMint, (bob));
+        bytes memory data = abi.encodeWithSelector(optimistAllowlist.isAllowedToMint.selector, bob);
         vm.expectCall(address(optimistAllowlist), data);
 
         // mint an NFT and expect mint transfer event to be emitted
@@ -260,7 +262,7 @@ contract OptimistTest is Optimist_Initializer {
         assertTrue(optimistAllowlist.isAllowedToMint(bob));
 
         // Check that the OptimistAllowlist is checked
-        bytes memory data = abi.encodeCall(OptimistAllowlist.isAllowedToMint, (bob));
+        bytes memory data = abi.encodeWithSelector(optimistAllowlist.isAllowedToMint.selector, bob);
         vm.expectCall(address(optimistAllowlist), data);
 
         // mint an NFT and expect mint transfer event to be emitted
@@ -291,7 +293,7 @@ contract OptimistTest is Optimist_Initializer {
         assertTrue(optimistAllowlist.isAllowedToMint(bob));
 
         // Check that the OptimistAllowlist is checked
-        bytes memory data = abi.encodeCall(OptimistAllowlist.isAllowedToMint, (bob));
+        bytes memory data = abi.encodeWithSelector(optimistAllowlist.isAllowedToMint.selector, bob);
         vm.expectCall(address(optimistAllowlist), data);
 
         // mint an NFT and expect mint transfer event to be emitted
@@ -348,9 +350,11 @@ contract OptimistTest is Optimist_Initializer {
     function test_baseURI_returnsCorrectBaseURI_succeeds() external {
         _attestBaseURI(base_uri);
 
-        bytes memory data = abi.encodeCall(
-            attestationStation.attestations,
-            (carol_baseURIAttestor, address(optimist), optimist.BASE_URI_ATTESTATION_KEY())
+        bytes memory data = abi.encodeWithSelector(
+            attestationStation.attestations.selector,
+            carol_baseURIAttestor,
+            address(optimist),
+            optimist.BASE_URI_ATTESTATION_KEY()
         );
         vm.expectCall(address(attestationStation), data);
         vm.prank(carol_baseURIAttestor);
@@ -523,14 +527,14 @@ contract OptimistTest is Optimist_Initializer {
         // First call is to claim the invite, receiving the attestation
         calls[0] = IMulticall3.Call3({
             target: address(optimistInviter),
-            callData: abi.encodeCall(OptimistInviter.claimInvite, (bob, claimableInvite, signature)),
+            callData: abi.encodeWithSelector(optimistInviter.claimInvite.selector, bob, claimableInvite, signature),
             allowFailure: false
         });
 
         // Second call is to mint the Optimist NFT
         calls[1] = IMulticall3.Call3({
             target: address(optimist),
-            callData: abi.encodeCall(Optimist.mint, (bob)),
+            callData: abi.encodeWithSelector(optimist.mint.selector, bob),
             allowFailure: false
         });
 

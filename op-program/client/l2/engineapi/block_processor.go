@@ -51,13 +51,12 @@ func NewBlockProcessorFromPayloadAttributes(provider BlockDataProvider, parent c
 		Nonce:            types.EncodeNonce(0),
 		ParentBeaconRoot: attrs.ParentBeaconBlockRoot,
 	}
-	if attrs.EIP1559Params != nil {
-		d, e := eip1559.DecodeHolocene1559Params(attrs.EIP1559Params[:])
-		if d == 0 {
-			d = provider.Config().BaseFeeChangeDenominator(header.Time)
-			e = provider.Config().ElasticityMultiplier()
-		}
-		header.Extra = eip1559.EncodeHoloceneExtraData(d, e)
+
+	// Ecotone
+	if attrs.ParentBeaconBlockRoot != nil {
+		zero := uint64(0)
+		header.BlobGasUsed = &zero
+		header.ExcessBlobGas = &zero
 	}
 
 	return NewBlockProcessorFromHeader(provider, header)
@@ -81,7 +80,7 @@ func NewBlockProcessorFromHeader(provider BlockDataProvider, h *types.Header) (*
 	header.BaseFee = eip1559.CalcBaseFee(provider.Config(), parentHeader, header.Time)
 	header.GasUsed = 0
 	gasPool := new(core.GasPool).AddGas(header.GasLimit)
-	mkEVM := func() *vm.EVM {
+	if h.ParentBeaconRoot != nil {
 		// Unfortunately this is not part of any Geth environment setup,
 		// we just have to apply it, like how the Geth block-builder worker does.
 		context := core.NewEVMBlockContext(header, provider, nil, provider.Config(), statedb)
@@ -91,21 +90,7 @@ func NewBlockProcessorFromHeader(provider BlockDataProvider, h *types.Header) (*
 			precompileOverrides = vmConfig.PrecompileOverrides
 		}
 		vmenv := vm.NewEVM(context, vm.TxContext{}, statedb, provider.Config(), vm.Config{PrecompileOverrides: precompileOverrides})
-		return vmenv
-	}
-	if h.ParentBeaconRoot != nil {
-		if provider.Config().IsCancun(header.Number, header.Time) {
-			// Blob tx not supported on optimism chains but fields must be set when Cancun is active.
-			zero := uint64(0)
-			header.BlobGasUsed = &zero
-			header.ExcessBlobGas = &zero
-		}
-		vmenv := mkEVM()
 		core.ProcessBeaconBlockRoot(*header.ParentBeaconRoot, vmenv, statedb)
-	}
-	if provider.Config().IsPrague(header.Number, header.Time) {
-		vmenv := mkEVM()
-		core.ProcessParentBlockHash(header.ParentHash, vmenv, statedb)
 	}
 	return &BlockProcessor{
 		header:       header,

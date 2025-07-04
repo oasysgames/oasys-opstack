@@ -4,10 +4,13 @@ pragma solidity 0.8.15;
 // Testing
 import { CommonTest } from "test/setup/CommonTest.sol";
 
+// Contracts
+import { GovernanceToken } from "src/governance/GovernanceToken.sol";
+import { MintManager } from "src/governance/MintManager.sol";
+
 // Interfaces
 import { IGovernanceToken } from "src/governance/interfaces/IGovernanceToken.sol";
 import { IMintManager } from "src/governance/interfaces/IMintManager.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
 contract MintManager_Initializer is CommonTest {
     address constant owner = address(0x1234);
@@ -20,20 +23,10 @@ contract MintManager_Initializer is CommonTest {
         super.setUp();
 
         vm.prank(owner);
-        gov = IGovernanceToken(
-            DeployUtils.create1({
-                _name: "GovernanceToken",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IGovernanceToken.__constructor__, ()))
-            })
-        );
+        gov = IGovernanceToken(address(new GovernanceToken()));
 
         vm.prank(owner);
-        manager = IMintManager(
-            DeployUtils.create1({
-                _name: "MintManager",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IMintManager.__constructor__, (owner, address(gov))))
-            })
-        );
+        manager = IMintManager(address(new MintManager(owner, address(gov))));
 
         vm.prank(owner);
         gov.transferOwnership(address(manager));
