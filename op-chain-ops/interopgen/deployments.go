@@ -9,10 +9,14 @@ type L1Deployment struct {
 }
 
 type Implementations struct {
-	OpcmProxy                        common.Address `json:"OPCMProxy"`
-	OpcmImpl                         common.Address `json:"OPCMImpl"`
+	Opcm                             common.Address `json:"OPCM"`
+	OpcmContractsContainer           common.Address `json:"OPCMContractsContainer"`
+	OpcmGameTypeAdder                common.Address `json:"OPCMGameTypeAdder"`
+	OpcmDeployer                     common.Address `json:"OPCMDeployer"`
+	OpcmUpgrader                     common.Address `json:"OPCMUpgrader"`
 	DelayedWETHImpl                  common.Address `json:"DelayedWETHImpl"`
 	OptimismPortalImpl               common.Address `json:"OptimismPortalImpl"`
+	ETHLockboxImpl                   common.Address `json:"ETHLockboxImpl"`
 	PreimageOracleSingleton          common.Address `json:"PreimageOracleSingleton"`
 	MipsSingleton                    common.Address `json:"MipsSingleton"`
 	SystemConfigImpl                 common.Address `json:"SystemConfigImpl"`
@@ -21,6 +25,9 @@ type Implementations struct {
 	L1StandardBridgeImpl             common.Address `json:"L1StandardBridgeImpl"`
 	OptimismMintableERC20FactoryImpl common.Address `json:"OptimismMintableERC20FactoryImpl"`
 	DisputeGameFactoryImpl           common.Address `json:"DisputeGameFactoryImpl"`
+	AnchorStateRegistryImpl          common.Address `json:"AnchorStateRegistryImpl"`
+	SuperchainConfigImpl             common.Address `json:"SuperchainConfigImpl"`
+	ProtocolVersionsImpl             common.Address `json:"ProtocolVersionsImpl"`
 }
 
 type SuperchainDeployment struct {
@@ -45,9 +52,9 @@ type L2OpchainDeployment struct {
 	L1CrossDomainMessengerProxy       common.Address `json:"L1CrossDomainMessengerProxy"`
 	// Fault proof contracts below.
 	OptimismPortalProxy                common.Address `json:"OptimismPortalProxy"`
+	ETHLockboxProxy                    common.Address `json:"ETHLockboxProxy"`
 	DisputeGameFactoryProxy            common.Address `json:"DisputeGameFactoryProxy"`
 	AnchorStateRegistryProxy           common.Address `json:"AnchorStateRegistryProxy"`
-	AnchorStateRegistryImpl            common.Address `json:"AnchorStateRegistryImpl"`
 	FaultDisputeGame                   common.Address `json:"FaultDisputeGame"`
 	PermissionedDisputeGame            common.Address `json:"PermissionedDisputeGame"`
 	DelayedWETHPermissionedGameProxy   common.Address `json:"DelayedWETHPermissionedGameProxy"`

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -22,7 +23,7 @@ import (
 )
 
 func TestSupervisorService(t *testing.T) {
-	depSet, err := depset.NewStaticConfigDependencySet(make(map[types.ChainID]*depset.StaticConfigDependency))
+	depSet, err := depset.NewStaticConfigDependencySet(make(map[eth.ChainID]*depset.StaticConfigDependency))
 	require.NoError(t, err)
 
 	cfg := &config.Config{
@@ -71,8 +72,8 @@ func TestSupervisorService(t *testing.T) {
 				BlockNumber: 123,
 				LogIndex:    42,
 				Timestamp:   1234567,
-				ChainID:     types.ChainID{0xbb},
-			}, common.Hash{0xcc})
+				ChainID:     eth.ChainID{0xbb},
+			}, common.Hash{0xcc}, types.ExecutingDescriptor{Timestamp: 1234568})
 		cancel()
 		require.NoError(t, err)
 		require.Equal(t, types.CrossUnsafe, dest, "expecting mock to return cross-unsafe")

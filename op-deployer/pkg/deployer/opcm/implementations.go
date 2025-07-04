@@ -10,7 +10,6 @@ import (
 )
 
 type DeployImplementationsInput struct {
-	Salt                            common.Hash
 	WithdrawalDelaySeconds          *big.Int
 	MinProposalSizeBytes            *big.Int
 	ChallengePeriodSeconds          *big.Int
@@ -18,13 +17,12 @@ type DeployImplementationsInput struct {
 	DisputeGameFinalityDelaySeconds *big.Int
 	MipsVersion                     *big.Int
 	// Release version to set OPCM implementations for, of the format `op-contracts/vX.Y.Z`.
-	Release               string
+	L1ContractsRelease    string
 	SuperchainConfigProxy common.Address
 	ProtocolVersionsProxy common.Address
+	SuperchainProxyAdmin  common.Address
+	UpgradeController     common.Address
 	UseInterop            bool // if true, deploy Interop implementations
-
-	OpcmProxyOwner       common.Address
-	StandardVersionsToml string // contents of 'standard-versions-mainnet.toml' or 'standard-versions-sepolia.toml' file
 }
 
 func (input *DeployImplementationsInput) InputSet() bool {
@@ -32,18 +30,25 @@ func (input *DeployImplementationsInput) InputSet() bool {
 }
 
 type DeployImplementationsOutput struct {
-	OpcmProxy                        common.Address
-	OpcmImpl                         common.Address
-	DelayedWETHImpl                  common.Address
-	OptimismPortalImpl               common.Address
-	PreimageOracleSingleton          common.Address
-	MipsSingleton                    common.Address
-	SystemConfigImpl                 common.Address
-	L1CrossDomainMessengerImpl       common.Address
-	L1ERC721BridgeImpl               common.Address
-	L1StandardBridgeImpl             common.Address
-	OptimismMintableERC20FactoryImpl common.Address
-	DisputeGameFactoryImpl           common.Address
+	Opcm                             common.Address `json:"opcmAddress"`
+	OpcmContractsContainer           common.Address `json:"opcmContractsContainerAddress"`
+	OpcmGameTypeAdder                common.Address `json:"opcmGameTypeAdderAddress"`
+	OpcmDeployer                     common.Address `json:"opcmDeployerAddress"`
+	OpcmUpgrader                     common.Address `json:"opcmUpgraderAddress"`
+	DelayedWETHImpl                  common.Address `json:"delayedWETHImplAddress"`
+	OptimismPortalImpl               common.Address `json:"optimismPortalImplAddress"`
+	ETHLockboxImpl                   common.Address `json:"ethLockboxImplAddress" evm:"ethLockboxImpl"`
+	PreimageOracleSingleton          common.Address `json:"preimageOracleSingletonAddress"`
+	MipsSingleton                    common.Address `json:"mipsSingletonAddress"`
+	SystemConfigImpl                 common.Address `json:"systemConfigImplAddress"`
+	L1CrossDomainMessengerImpl       common.Address `json:"l1CrossDomainMessengerImplAddress"`
+	L1ERC721BridgeImpl               common.Address `json:"l1ERC721BridgeImplAddress"`
+	L1StandardBridgeImpl             common.Address `json:"l1StandardBridgeImplAddress"`
+	OptimismMintableERC20FactoryImpl common.Address `json:"optimismMintableERC20FactoryImplAddress"`
+	DisputeGameFactoryImpl           common.Address `json:"disputeGameFactoryImplAddress"`
+	AnchorStateRegistryImpl          common.Address `json:"anchorStateRegistryImplAddress"`
+	SuperchainConfigImpl             common.Address `json:"superchainConfigImplAddress"`
+	ProtocolVersionsImpl             common.Address `json:"protocolVersionsImplAddress"`
 }
 
 func (output *DeployImplementationsOutput) CheckOutput(input common.Address) error {
@@ -86,10 +91,7 @@ func DeployImplementations(
 	defer cleanupDeploy()
 
 	opcmContract := "OPContractsManager"
-	if input.UseInterop {
-		opcmContract = "OPContractsManagerInterop"
-	}
-	if err := host.RememberOnLabel("OPContractsManager", opcmContract+".sol", opcmContract); err != nil {
+	if err := host.RememberOnLabel("OPContractsManager", "OPContractsManager.sol", opcmContract); err != nil {
 		return output, fmt.Errorf("failed to link OPContractsManager label: %w", err)
 	}
 

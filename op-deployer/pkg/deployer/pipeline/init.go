@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/standard"
-
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/state"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/script"
@@ -22,35 +21,42 @@ func InitLiveStrategy(ctx context.Context, env *Env, intent *state.Intent, st *s
 	lgr := env.Logger.New("stage", "init", "strategy", "live")
 	lgr.Info("initializing pipeline")
 
-	if err := initCommonChecks(st); err != nil {
+	if err := initCommonChecks(intent, st); err != nil {
 		return err
 	}
 
-	if intent.L1ContractsLocator.IsTag() {
+	opcmAddress, opcmAddrErr := standard.ManagerImplementationAddrFor(intent.L1ChainID, intent.L1ContractsLocator.Tag)
+	hasPredeployedOPCM := opcmAddrErr == nil
+	isL1Tag := intent.L1ContractsLocator.IsTag()
+	isL2Tag := intent.L2ContractsLocator.IsTag()
+
+	if isL1Tag && !standard.IsSupportedL1Version(intent.L1ContractsLocator.Tag) {
+		return fmt.Errorf("unsupported L1 version: %s", intent.L1ContractsLocator.Tag)
+	}
+
+	if isL2Tag && !standard.IsSupportedL2Version(intent.L2ContractsLocator.Tag) {
+		return fmt.Errorf("unsupported L2 version: %s", intent.L2ContractsLocator.Tag)
+	}
+
+	if isL1Tag && hasPredeployedOPCM {
 		superCfg, err := standard.SuperchainFor(intent.L1ChainID)
 		if err != nil {
 			return fmt.Errorf("error getting superchain config: %w", err)
 		}
 
-		proxyAdmin, err := standard.ManagerOwnerAddrFor(intent.L1ChainID)
+		proxyAdmin, err := standard.SuperchainProxyAdminAddrFor(intent.L1ChainID)
 		if err != nil {
 			return fmt.Errorf("error getting superchain proxy admin address: %w", err)
 		}
 
-		// Have to do this weird pointer thing below because the Superchain Registry defines its
-		// own Address type.
 		st.SuperchainDeployment = &state.SuperchainDeployment{
 			ProxyAdminAddress:            proxyAdmin,
-			ProtocolVersionsProxyAddress: common.Address(*superCfg.Config.ProtocolVersionsAddr),
-			SuperchainConfigProxyAddress: common.Address(*superCfg.Config.SuperchainConfigAddr),
+			ProtocolVersionsProxyAddress: superCfg.ProtocolVersionsAddr,
+			SuperchainConfigProxyAddress: superCfg.SuperchainConfigAddr,
 		}
 
-		opcmProxy, err := standard.ManagerImplementationAddrFor(intent.L1ChainID)
-		if err != nil {
-			return fmt.Errorf("error getting OPCM proxy address: %w", err)
-		}
 		st.ImplementationsDeployment = &state.ImplementationsDeployment{
-			OpcmProxyAddress: opcmProxy,
+			OpcmAddress: opcmAddress,
 		}
 	}
 
@@ -92,7 +98,7 @@ func InitLiveStrategy(ctx context.Context, env *Env, intent *state.Intent, st *s
 	return nil
 }
 
-func initCommonChecks(st *state.State) error {
+func initCommonChecks(intent *state.Intent, st *state.State) error {
 	// Ensure the state version is supported.
 	if !IsSupportedStateVersion(st.Version) {
 		return fmt.Errorf("unsupported state version: %d", st.Version)
@@ -104,6 +110,7 @@ func initCommonChecks(st *state.State) error {
 			return fmt.Errorf("failed to generate CREATE2 salt: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -111,7 +118,7 @@ func InitGenesisStrategy(env *Env, intent *state.Intent, st *state.State) error 
 	lgr := env.Logger.New("stage", "init", "strategy", "genesis")
 	lgr.Info("initializing pipeline")
 
-	if err := initCommonChecks(st); err != nil {
+	if err := initCommonChecks(intent, st); err != nil {
 		return err
 	}
 

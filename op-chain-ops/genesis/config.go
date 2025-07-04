@@ -233,6 +233,10 @@ type GasPriceOracleDeployConfig struct {
 	GasPriceOracleBaseFeeScalar uint32 `json:"gasPriceOracleBaseFeeScalar" evm:"basefeeScalar"`
 	// GasPriceOracleBlobBaseFeeScalar represents the value of the blob base fee scalar used for fee calculations.
 	GasPriceOracleBlobBaseFeeScalar uint32 `json:"gasPriceOracleBlobBaseFeeScalar" evm:"blobbasefeeScalar"`
+	// GasPriceOracleOperatorFeeScalar represents the value of the operator fee scalar used for fee calculations.
+	GasPriceOracleOperatorFeeScalar uint32 `json:"gasPriceOracleOperatorFeeScalar" evm:"operatorfeeScalar"`
+	// GasPriceOracleOperatorFeeConstant represents the value of the operator fee constant used for fee calculations.
+	GasPriceOracleOperatorFeeConstant uint64 `json:"gasPriceOracleOperatorFeeConstant" evm:"operatorfeeConstant"`
 }
 
 var _ ConfigChecker = (*GasPriceOracleDeployConfig)(nil)
@@ -256,6 +260,14 @@ func (d *GasPriceOracleDeployConfig) FeeScalar() [32]byte {
 	return eth.EncodeScalar(eth.EcotoneScalars{
 		BlobBaseFeeScalar: d.GasPriceOracleBlobBaseFeeScalar,
 		BaseFeeScalar:     d.GasPriceOracleBaseFeeScalar,
+	})
+}
+
+// OperatorFeeParams returns the raw serialized operator fee params.
+func (d *GasPriceOracleDeployConfig) OperatorFeeParams() [32]byte {
+	return eth.EncodeOperatorFeeParams(eth.OperatorFeeParams{
+		Scalar:   d.GasPriceOracleOperatorFeeScalar,
+		Constant: d.GasPriceOracleOperatorFeeConstant,
 	})
 }
 
@@ -345,12 +357,23 @@ type UpgradeScheduleDeployConfig struct {
 	// L2GenesisHoloceneTimeOffset is the number of seconds after genesis block that the Holocene hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Holocene.
 	L2GenesisHoloceneTimeOffset *hexutil.Uint64 `json:"l2GenesisHoloceneTimeOffset,omitempty"`
+	// L2GenesisIsthmusTimeOffset is the number of seconds after genesis block that the Isthmus hard fork activates.
+	// Set it to 0 to activate at genesis. Nil to disable Isthmus.
+	L2GenesisIsthmusTimeOffset *hexutil.Uint64 `json:"l2GenesisIsthmusTimeOffset,omitempty"`
 	// L2GenesisInteropTimeOffset is the number of seconds after genesis block that the Interop hard fork activates.
 	// Set it to 0 to activate at genesis. Nil to disable Interop.
 	L2GenesisInteropTimeOffset *hexutil.Uint64 `json:"l2GenesisInteropTimeOffset,omitempty"`
 
+	// Optional Forks
+
+	// L2GenesisPectraBlobScheduleTimeOffset is the number of seconds after genesis block that the PectraBlobSchedule fix activates.
+	// Set it to 0 to activate at genesis. Nil to disable the PectraBlobSchedule fix.
+	L2GenesisPectraBlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisPectraBlobScheduleTimeOffset,omitempty"`
+
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
+	// When Prague activates. Relative to L1 genesis.
+	L1PragueTimeOffset *hexutil.Uint64 `json:"l1PragueTimeOffset,omitempty"`
 
 	// UseInterop is a flag that indicates if the system is using interop
 	UseInterop bool `json:"useInterop,omitempty"`
@@ -385,6 +408,8 @@ func (d *UpgradeScheduleDeployConfig) ForkTimeOffset(fork rollup.ForkName) *uint
 		return (*uint64)(d.L2GenesisGraniteTimeOffset)
 	case rollup.Holocene:
 		return (*uint64)(d.L2GenesisHoloceneTimeOffset)
+	case rollup.Isthmus:
+		return (*uint64)(d.L2GenesisIsthmusTimeOffset)
 	case rollup.Interop:
 		return (*uint64)(d.L2GenesisInteropTimeOffset)
 	default:
@@ -408,6 +433,8 @@ func (d *UpgradeScheduleDeployConfig) SetForkTimeOffset(fork rollup.ForkName, of
 		d.L2GenesisGraniteTimeOffset = (*hexutil.Uint64)(offset)
 	case rollup.Holocene:
 		d.L2GenesisHoloceneTimeOffset = (*hexutil.Uint64)(offset)
+	case rollup.Isthmus:
+		d.L2GenesisIsthmusTimeOffset = (*hexutil.Uint64)(offset)
 	case rollup.Interop:
 		d.L2GenesisInteropTimeOffset = (*hexutil.Uint64)(offset)
 	default:
@@ -472,6 +499,14 @@ func (d *UpgradeScheduleDeployConfig) HoloceneTime(genesisTime uint64) *uint64 {
 	return offsetToUpgradeTime(d.L2GenesisHoloceneTimeOffset, genesisTime)
 }
 
+func (d *UpgradeScheduleDeployConfig) PectraBlobScheduleTime(genesisTime uint64) *uint64 {
+	return offsetToUpgradeTime(d.L2GenesisPectraBlobScheduleTimeOffset, genesisTime)
+}
+
+func (d *UpgradeScheduleDeployConfig) IsthmusTime(genesisTime uint64) *uint64 {
+	return offsetToUpgradeTime(d.L2GenesisIsthmusTimeOffset, genesisTime)
+}
+
 func (d *UpgradeScheduleDeployConfig) InteropTime(genesisTime uint64) *uint64 {
 	return offsetToUpgradeTime(d.L2GenesisInteropTimeOffset, genesisTime)
 }
@@ -504,6 +539,7 @@ func (d *UpgradeScheduleDeployConfig) forks() []Fork {
 		{L2GenesisTimeOffset: d.L2GenesisFjordTimeOffset, Name: string(L2AllocsFjord)},
 		{L2GenesisTimeOffset: d.L2GenesisGraniteTimeOffset, Name: string(L2AllocsGranite)},
 		{L2GenesisTimeOffset: d.L2GenesisHoloceneTimeOffset, Name: string(L2AllocsHolocene)},
+		{L2GenesisTimeOffset: d.L2GenesisIsthmusTimeOffset, Name: string(L2AllocsIsthmus)},
 	}
 }
 
@@ -854,12 +890,6 @@ func (d *L1DependenciesConfig) CheckAddresses(dependencyContext DependencyContex
 // The genesis generation may log warnings, do a best-effort support attempt,
 // or ignore these attributes completely.
 type LegacyDeployConfig struct {
-	// CliqueSignerAddress represents the signer address for the clique consensus engine.
-	// It is used in the multi-process devnet to sign blocks.
-	CliqueSignerAddress common.Address `json:"cliqueSignerAddress"`
-	// L1UseClique represents whether or not to use the clique consensus engine.
-	L1UseClique bool `json:"l1UseClique"`
-
 	// DeploymentWaitConfirmations is the number of confirmations to wait during
 	// deployment. This is DEPRECATED and should be removed in a future PR.
 	DeploymentWaitConfirmations int `json:"deploymentWaitConfirmations"`
@@ -968,6 +998,13 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 	if d.SystemConfigProxy == (common.Address{}) {
 		return nil, errors.New("SystemConfigProxy cannot be address(0)")
 	}
+
+	chainOpConfig := &params.OptimismConfig{
+		EIP1559Elasticity:        d.EIP1559Elasticity,
+		EIP1559Denominator:       d.EIP1559Denominator,
+		EIP1559DenominatorCanyon: &d.EIP1559DenominatorCanyon,
+	}
+
 	var altDA *rollup.AltDAConfig
 	if d.UseAltDA {
 		altDA = &rollup.AltDAConfig{
@@ -990,13 +1027,8 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 				Hash:   l2GenesisBlockHash,
 				Number: l2GenesisBlockNumber,
 			},
-			L2Time: l1StartBlock.Time,
-			SystemConfig: eth.SystemConfig{
-				BatcherAddr: d.BatchSenderAddress,
-				Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(d.GasPriceOracleOverhead))),
-				Scalar:      eth.Bytes32(d.FeeScalar()),
-				GasLimit:    uint64(d.L2GenesisBlockGasLimit),
-			},
+			L2Time:       l1StartBlock.Time,
+			SystemConfig: d.GenesisSystemConfig(),
 		},
 		BlockTime:               d.L2BlockTime,
 		MaxSequencerDrift:       d.MaxSequencerDrift,
@@ -1014,10 +1046,25 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 		FjordTime:               d.FjordTime(l1StartTime),
 		GraniteTime:             d.GraniteTime(l1StartTime),
 		HoloceneTime:            d.HoloceneTime(l1StartTime),
+		PectraBlobScheduleTime:  d.PectraBlobScheduleTime(l1StartTime),
+		IsthmusTime:             d.IsthmusTime(l1StartTime),
 		InteropTime:             d.InteropTime(l1StartTime),
 		ProtocolVersionsAddress: d.ProtocolVersionsProxy,
 		AltDAConfig:             altDA,
+		ChainOpConfig:           chainOpConfig,
 	}, nil
+}
+
+// GenesisSystemConfig converts a DeployConfig to a eth.SystemConfig. If Ecotone is active at genesis, the
+// Overhead value is considered a noop.
+func (d *DeployConfig) GenesisSystemConfig() eth.SystemConfig {
+	return eth.SystemConfig{
+		BatcherAddr:       d.BatchSenderAddress,
+		Overhead:          eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(d.GasPriceOracleOverhead))),
+		Scalar:            d.FeeScalar(),
+		GasLimit:          uint64(d.L2GenesisBlockGasLimit),
+		OperatorFeeParams: d.OperatorFeeParams(),
+	}
 }
 
 // NewDeployConfig reads a config file given a path on the filesystem.
@@ -1064,6 +1111,8 @@ type L1Deployments struct {
 	OptimismMintableERC20FactoryProxy common.Address `json:"OptimismMintableERC20FactoryProxy"`
 	OptimismPortal                    common.Address `json:"OptimismPortal"`
 	OptimismPortalProxy               common.Address `json:"OptimismPortalProxy"`
+	ETHLockbox                        common.Address `json:"ETHLockbox"`
+	ETHLockboxProxy                   common.Address `json:"ETHLockboxProxy"`
 	ProxyAdmin                        common.Address `json:"ProxyAdmin"`
 	SystemConfig                      common.Address `json:"SystemConfig"`
 	SystemConfigProxy                 common.Address `json:"SystemConfigProxy"`
@@ -1109,6 +1158,7 @@ func (d *L1Deployments) Check(deployConfig *DeployConfig) error {
 				name == "DataAvailabilityChallengeProxy") {
 			continue
 		}
+
 		if val.Field(i).Interface().(common.Address) == (common.Address{}) {
 			return fmt.Errorf("%s is not set", name)
 		}

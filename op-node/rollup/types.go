@@ -120,6 +120,10 @@ type Config struct {
 	// Active if HoloceneTime != nil && L2 block timestamp >= *HoloceneTime, inactive otherwise.
 	HoloceneTime *uint64 `json:"holocene_time,omitempty"`
 
+	// IsthmusTime sets the activation time of the Isthmus network upgrade.
+	// Active if IsthmusTime != nil && L2 block timestamp >= *IsthmusTime, inactive otherwise.
+	IsthmusTime *uint64 `json:"isthmus_time,omitempty"`
+
 	// InteropTime sets the activation time for an experimental feature-set, activated like a hardfork.
 	// Active if InteropTime != nil && L2 block timestamp >= *InteropTime, inactive otherwise.
 	InteropTime *uint64 `json:"interop_time,omitempty"`
@@ -137,8 +141,24 @@ type Config struct {
 	// L1 address that declares the protocol versions, optional (Beta feature)
 	ProtocolVersionsAddress common.Address `json:"protocol_versions_address,omitempty"`
 
+	// ChainOpConfig is the OptimismConfig of the execution layer ChainConfig.
+	// It is used during safe chain consolidation to translate zero SystemConfig EIP1559
+	// parameters to the protocol values, like the execution layer does.
+	// If missing, it is loaded by the op-node from the embedded superchain config at startup.
+	ChainOpConfig *params.OptimismConfig `json:"chain_op_config,omitempty"`
+
+	// Optional Features
+
 	// AltDAConfig. We are in the process of migrating to the AltDAConfig from these legacy top level values
 	AltDAConfig *AltDAConfig `json:"alt_da,omitempty"`
+
+	// PectraBlobScheduleTime sets the time until which (but not including) the blob base fee
+	// calculations for the L1 Block Info use the pre-Prague=Cancun blob parameters.
+	// This feature is optional and if not active, the L1 Block Info calculation uses the Prague
+	// blob parameters for the first L1 Prague block, as was intended.
+	// This feature (de)activates by L1 origin timestamp, to keep a consistent L1 block info per L2
+	// epoch.
+	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -328,8 +348,15 @@ func (cfg *Config) Check() error {
 	if err := checkFork(cfg.GraniteTime, cfg.HoloceneTime, Granite, Holocene); err != nil {
 		return err
 	}
+	if err := checkFork(cfg.HoloceneTime, cfg.IsthmusTime, Holocene, Isthmus); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func (cfg *Config) HasOptimismWithdrawalsRoot(timestamp uint64) bool {
+	return cfg.IsIsthmus(timestamp)
 }
 
 // validateAltDAConfig checks the two approaches to configuring alt-da mode.
@@ -404,6 +431,11 @@ func (c *Config) IsHolocene(timestamp uint64) bool {
 	return c.HoloceneTime != nil && timestamp >= *c.HoloceneTime
 }
 
+// IsIsthmus returns true if the Isthmus hardfork is active at or past the given timestamp.
+func (c *Config) IsIsthmus(timestamp uint64) bool {
+	return c.IsthmusTime != nil && timestamp >= *c.IsthmusTime
+}
+
 // IsInterop returns true if the Interop hardfork is active at or past the given timestamp.
 func (c *Config) IsInterop(timestamp uint64) bool {
 	return c.InteropTime != nil && timestamp >= *c.InteropTime
@@ -459,6 +491,14 @@ func (c *Config) IsHoloceneActivationBlock(l2BlockTime uint64) bool {
 		!c.IsHolocene(l2BlockTime-c.BlockTime)
 }
 
+// IsIsthmusActivationBlock returns whether the specified block is the first block subject to the
+// Isthmus upgrade.
+func (c *Config) IsIsthmusActivationBlock(l2BlockTime uint64) bool {
+	return c.IsIsthmus(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsIsthmus(l2BlockTime-c.BlockTime)
+}
+
 func (c *Config) IsInteropActivationBlock(l2BlockTime uint64) bool {
 	return c.IsInterop(l2BlockTime) &&
 		l2BlockTime >= c.BlockTime &&
@@ -481,6 +521,9 @@ func (c *Config) ActivateAtGenesis(hardfork ForkName) {
 	switch hardfork {
 	case Interop:
 		c.InteropTime = new(uint64)
+		fallthrough
+	case Isthmus:
+		c.IsthmusTime = new(uint64)
 		fallthrough
 	case Holocene:
 		c.HoloceneTime = new(uint64)
@@ -532,7 +575,9 @@ func (c *Config) ForkchoiceUpdatedVersion(attr *eth.PayloadAttributes) eth.Engin
 
 // NewPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
 func (c *Config) NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
-	if c.IsEcotone(timestamp) {
+	if c.IsIsthmus(timestamp) {
+		return eth.NewPayloadV4
+	} else if c.IsEcotone(timestamp) {
 		// Cancun
 		return eth.NewPayloadV3
 	} else {
@@ -542,7 +587,9 @@ func (c *Config) NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
 
 // GetPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
 func (c *Config) GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
-	if c.IsEcotone(timestamp) {
+	if c.IsIsthmus(timestamp) {
+		return eth.GetPayloadV4
+	} else if c.IsEcotone(timestamp) {
 		// Cancun
 		return eth.GetPayloadV3
 	} else {
@@ -621,6 +668,7 @@ func (c *Config) Description(l2Chains map[string]string) string {
 	banner += fmt.Sprintf("  - Fjord: %s\n", fmtForkTimeOrUnset(c.FjordTime))
 	banner += fmt.Sprintf("  - Granite: %s\n", fmtForkTimeOrUnset(c.GraniteTime))
 	banner += fmt.Sprintf("  - Holocene: %s\n", fmtForkTimeOrUnset(c.HoloceneTime))
+	banner += fmt.Sprintf("  - Isthmus: %s\n", fmtForkTimeOrUnset(c.IsthmusTime))
 	banner += fmt.Sprintf("  - Interop: %s\n", fmtForkTimeOrUnset(c.InteropTime))
 	// Report the protocol version
 	banner += fmt.Sprintf("Node supports up to OP-Stack Protocol Version: %s\n", OPStackSupport)
@@ -647,7 +695,8 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 		networkL1 = "unknown L1"
 	}
 
-	log.Info("Rollup Config", "l2_chain_id", c.L2ChainID, "l2_network", networkL2, "l1_chain_id", c.L1ChainID,
+	ctx := []any{
+		"l2_chain_id", c.L2ChainID, "l2_network", networkL2, "l1_chain_id", c.L1ChainID,
 		"l1_network", networkL1, "l2_start_time", c.Genesis.L2Time, "l2_block_hash", c.Genesis.L2.Hash.String(),
 		"l2_block_number", c.Genesis.L2.Number, "l1_block_hash", c.Genesis.L1.Hash.String(),
 		"l1_block_number", c.Genesis.L1.Number, "regolith_time", fmtForkTimeOrUnset(c.RegolithTime),
@@ -657,9 +706,17 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 		"fjord_time", fmtForkTimeOrUnset(c.FjordTime),
 		"granite_time", fmtForkTimeOrUnset(c.GraniteTime),
 		"holocene_time", fmtForkTimeOrUnset(c.HoloceneTime),
+		"isthmus_time", fmtForkTimeOrUnset(c.IsthmusTime),
 		"interop_time", fmtForkTimeOrUnset(c.InteropTime),
-		"alt_da", c.AltDAConfig != nil,
-	)
+	}
+	if c.AltDAConfig != nil {
+		ctx = append(ctx, "alt_da", *c.AltDAConfig)
+	}
+	if c.PectraBlobScheduleTime != nil {
+		// only print in config if set at all
+		ctx = append(ctx, "pectra_blob_schedule_time", fmtForkTimeOrUnset(c.PectraBlobScheduleTime))
+	}
+	log.Info("Rollup Config", ctx...)
 }
 
 func (c *Config) ParseRollupConfig(in io.Reader) error {

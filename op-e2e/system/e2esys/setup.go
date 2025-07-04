@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/challenger"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 
 	"github.com/stretchr/testify/require"
@@ -196,6 +197,7 @@ func RegolithSystemConfig(t *testing.T, regolithTimeOffset *hexutil.Uint64, opts
 	cfg.DeployConfig.L2GenesisFjordTimeOffset = nil
 	cfg.DeployConfig.L2GenesisGraniteTimeOffset = nil
 	cfg.DeployConfig.L2GenesisHoloceneTimeOffset = nil
+	cfg.DeployConfig.L2GenesisIsthmusTimeOffset = nil
 	// ADD NEW FORKS HERE!
 	return cfg
 }
@@ -235,6 +237,13 @@ func GraniteSystemConfig(t *testing.T, graniteTimeOffset *hexutil.Uint64, opts .
 func HoloceneSystemConfig(t *testing.T, holoceneTimeOffset *hexutil.Uint64, opts ...SystemConfigOpt) SystemConfig {
 	cfg := GraniteSystemConfig(t, &genesisTime, opts...)
 	cfg.DeployConfig.L2GenesisHoloceneTimeOffset = holoceneTimeOffset
+	return cfg
+}
+
+func IsthmusSystemConfig(t *testing.T, isthmusTimeOffset *hexutil.Uint64, opts ...SystemConfigOpt) SystemConfig {
+	cfg := HoloceneSystemConfig(t, &genesisTime, opts...)
+	cfg.DeployConfig.L1PragueTimeOffset = isthmusTimeOffset
+	cfg.DeployConfig.L2GenesisIsthmusTimeOffset = isthmusTimeOffset
 	return cfg
 }
 
@@ -366,6 +375,23 @@ type System struct {
 	clients map[string]*ethclient.Client
 }
 
+func (sys *System) PrestateVariant() challenger.PrestateVariant {
+	switch sys.AllocType() {
+	case config.AllocTypeMTCannon:
+		return challenger.MTCannonVariant
+	default:
+		return challenger.STCannonVariant
+	}
+}
+
+func (sys *System) DisputeGameFactoryAddr() common.Address {
+	return sys.L1Deployments().DisputeGameFactoryProxy
+}
+
+func (sys *System) SupervisorClient() *sources.SupervisorClient {
+	panic("supervisor not supported for single chain system")
+}
+
 func (sys *System) Config() SystemConfig { return sys.Cfg }
 
 // AdvanceTime advances the system clock by the given duration.
@@ -409,8 +435,16 @@ func (sys *System) RollupCfg() *rollup.Config {
 	return sys.RollupConfig
 }
 
+func (sys *System) RollupCfgs() []*rollup.Config {
+	return []*rollup.Config{sys.RollupConfig}
+}
+
 func (sys *System) L2Genesis() *core.Genesis {
 	return sys.L2GenesisCfg
+}
+
+func (sys *System) L2Geneses() []*core.Genesis {
+	return []*core.Genesis{sys.L2GenesisCfg}
 }
 
 func (sys *System) AllocType() config.AllocType {
@@ -507,7 +541,6 @@ func WithBatcherCompressionAlgo(ca derive.CompressionAlgo) StartOption {
 func WithBatcherThrottling(interval time.Duration, threshold, txSize, blockSize uint64) StartOption {
 	return StartOption{
 		BatcherMod: func(cfg *bss.CLIConfig) {
-			cfg.ThrottleInterval = interval
 			cfg.ThrottleThreshold = threshold
 			cfg.ThrottleTxSize = txSize
 			cfg.ThrottleBlockSize = blockSize
@@ -638,9 +671,16 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 			FjordTime:               cfg.DeployConfig.FjordTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			GraniteTime:             cfg.DeployConfig.GraniteTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			HoloceneTime:            cfg.DeployConfig.HoloceneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			PectraBlobScheduleTime:  cfg.DeployConfig.PectraBlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			IsthmusTime:             cfg.DeployConfig.IsthmusTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			InteropTime:             cfg.DeployConfig.InteropTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			ProtocolVersionsAddress: cfg.L1Deployments.ProtocolVersionsProxy,
 			AltDAConfig:             rollupAltDAConfig,
+			ChainOpConfig: &params.OptimismConfig{
+				EIP1559Elasticity:        cfg.DeployConfig.EIP1559Elasticity,
+				EIP1559Denominator:       cfg.DeployConfig.EIP1559Denominator,
+				EIP1559DenominatorCanyon: &cfg.DeployConfig.EIP1559DenominatorCanyon,
+			},
 		}
 	}
 	defaultConfig := makeRollupConfig()

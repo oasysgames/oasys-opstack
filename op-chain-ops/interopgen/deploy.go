@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/standard"
-
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/opcm"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -114,7 +112,7 @@ func CreateL1(logger log.Logger, fa *foundry.ArtifactsFS, srcFS *foundry.SourceM
 		PrevRandao:   cfg.L1GenesisBlockMixHash,
 		BlobHashes:   nil,
 	}
-	l1Host := script.NewHost(logger.New("role", "l1", "chain", cfg.ChainID), fa, srcFS, l1Context)
+	l1Host := script.NewHost(logger.New("role", "l1", "chain", cfg.ChainID), fa, srcFS, l1Context, script.WithCreate2Deployer())
 	return l1Host
 }
 
@@ -136,7 +134,7 @@ func CreateL2(logger log.Logger, fa *foundry.ArtifactsFS, srcFS *foundry.SourceM
 	return l2Host
 }
 
-// prepareInitialL1 deploys basics such as preinstalls to L1  (incl. EIP-4788)
+// PrepareInitialL1 deploys basics such as preinstalls to L1  (incl. EIP-4788)
 func PrepareInitialL1(l1Host *script.Host, cfg *L1Config) (*L1Deployment, error) {
 	l1Host.SetTxOrigin(sysGenesisDeployer)
 
@@ -170,12 +168,11 @@ func DeploySuperchainToL1(l1Host *script.Host, superCfg *SuperchainConfig) (*Sup
 		ProofMaturityDelaySeconds:       superCfg.Implementations.FaultProof.ProofMaturityDelaySeconds,
 		DisputeGameFinalityDelaySeconds: superCfg.Implementations.FaultProof.DisputeGameFinalityDelaySeconds,
 		MipsVersion:                     superCfg.Implementations.FaultProof.MipsVersion,
-		Release:                         superCfg.Implementations.Release,
+		L1ContractsRelease:              superCfg.Implementations.L1ContractsRelease,
 		SuperchainConfigProxy:           superDeployment.SuperchainConfigProxy,
 		ProtocolVersionsProxy:           superDeployment.ProtocolVersionsProxy,
-		OpcmProxyOwner:                  superDeployment.SuperchainProxyAdmin,
+		UpgradeController:               superCfg.ProxyAdminOwner,
 		UseInterop:                      superCfg.Implementations.UseInterop,
-		StandardVersionsToml:            standard.VersionsMainnetData,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to deploy Implementations contracts: %w", err)
@@ -200,25 +197,26 @@ func DeployL2ToL1(l1Host *script.Host, superCfg *SuperchainConfig, superDeployme
 
 	l1Host.SetTxOrigin(cfg.Deployer)
 
-	output, err := opcm.DeployOPChainV160(l1Host, opcm.DeployOPChainInputV160{
-		OpChainProxyAdminOwner:  cfg.ProxyAdminOwner,
-		SystemConfigOwner:       cfg.SystemConfigOwner,
-		Batcher:                 cfg.BatchSenderAddress,
-		UnsafeBlockSigner:       cfg.P2PSequencerAddress,
-		Proposer:                cfg.Proposer,
-		Challenger:              cfg.Challenger,
-		BasefeeScalar:           cfg.GasPriceOracleBaseFeeScalar,
-		BlobBaseFeeScalar:       cfg.GasPriceOracleBlobBaseFeeScalar,
-		L2ChainId:               new(big.Int).SetUint64(cfg.L2ChainID),
-		OpcmProxy:               superDeployment.OpcmProxy,
-		SaltMixer:               cfg.SaltMixer,
-		GasLimit:                cfg.GasLimit,
-		DisputeGameType:         cfg.DisputeGameType,
-		DisputeAbsolutePrestate: cfg.DisputeAbsolutePrestate,
-		DisputeMaxGameDepth:     cfg.DisputeMaxGameDepth,
-		DisputeSplitDepth:       cfg.DisputeSplitDepth,
-		DisputeClockExtension:   cfg.DisputeClockExtension,
-		DisputeMaxClockDuration: cfg.DisputeMaxClockDuration,
+	output, err := opcm.DeployOPChain(l1Host, opcm.DeployOPChainInput{
+		OpChainProxyAdminOwner:    cfg.ProxyAdminOwner,
+		SystemConfigOwner:         cfg.SystemConfigOwner,
+		Batcher:                   cfg.BatchSenderAddress,
+		UnsafeBlockSigner:         cfg.P2PSequencerAddress,
+		Proposer:                  cfg.Proposer,
+		Challenger:                cfg.Challenger,
+		BasefeeScalar:             cfg.GasPriceOracleBaseFeeScalar,
+		BlobBaseFeeScalar:         cfg.GasPriceOracleBlobBaseFeeScalar,
+		L2ChainId:                 new(big.Int).SetUint64(cfg.L2ChainID),
+		Opcm:                      superDeployment.Opcm,
+		SaltMixer:                 cfg.SaltMixer,
+		GasLimit:                  cfg.GasLimit,
+		DisputeGameUsesSuperRoots: cfg.DisputeGameUsesSuperRoots,
+		DisputeGameType:           cfg.DisputeGameType,
+		DisputeAbsolutePrestate:   cfg.DisputeAbsolutePrestate,
+		DisputeMaxGameDepth:       cfg.DisputeMaxGameDepth,
+		DisputeSplitDepth:         cfg.DisputeSplitDepth,
+		DisputeClockExtension:     cfg.DisputeClockExtension,
+		DisputeMaxClockDuration:   cfg.DisputeMaxClockDuration,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to deploy L2 OP chain: %w", err)
@@ -323,7 +321,9 @@ func CompleteL2(l2Host *script.Host, cfg *L2Config, l1Block *types.Block, deploy
 		allocs.Accounts[addr] = acc
 	}
 
-	l2Genesis.Alloc = allocs.Accounts
+	for addr, account := range allocs.Accounts {
+		l2Genesis.Alloc[addr] = account
+	}
 	l2GenesisBlock := l2Genesis.ToBlock()
 
 	rollupCfg, err := deployCfg.RollupConfig(l1Block.Header(), l2GenesisBlock.Hash(), l2GenesisBlock.NumberU64())

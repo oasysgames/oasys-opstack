@@ -307,6 +307,10 @@ type SyncDeriver struct {
 	Ctx context.Context
 
 	Drain func() error
+
+	// When in interop, and managed by an op-supervisor,
+	// the node performs a reset based on the instructions of the op-supervisor.
+	ManagedMode bool
 }
 
 func (s *SyncDeriver) AttachEmitter(em event.Emitter) {
@@ -339,6 +343,8 @@ func (s *SyncDeriver) OnEvent(ev event.Event) bool {
 		s.Emitter.Emit(StepReqEvent{ResetBackoff: true})
 	case engine.SafeDerivedEvent:
 		s.onSafeDerivedBlock(x)
+	case derive.ProvideL1Traversal:
+		s.Emitter.Emit(StepReqEvent{})
 	default:
 		return false
 	}
@@ -347,7 +353,7 @@ func (s *SyncDeriver) OnEvent(ev event.Event) bool {
 
 func (s *SyncDeriver) onSafeDerivedBlock(x engine.SafeDerivedEvent) {
 	if s.SafeHeadNotifs != nil && s.SafeHeadNotifs.Enabled() {
-		if err := s.SafeHeadNotifs.SafeHeadUpdated(x.Safe, x.DerivedFrom.ID()); err != nil {
+		if err := s.SafeHeadNotifs.SafeHeadUpdated(x.Safe, x.Source.ID()); err != nil {
 			// At this point our state is in a potentially inconsistent state as we've updated the safe head
 			// in the execution client but failed to post process it. Reset the pipeline so the safe head rolls back
 			// a little (it always rolls back at least 1 block) and then it will retry storing the entry
@@ -361,11 +367,11 @@ func (s *SyncDeriver) onEngineConfirmedReset(x engine.EngineResetConfirmedEvent)
 	// and don't confirm the engine-reset with the derivation pipeline.
 	// The pipeline will re-trigger a reset as necessary.
 	if s.SafeHeadNotifs != nil {
-		if err := s.SafeHeadNotifs.SafeHeadReset(x.Safe); err != nil {
-			s.Log.Error("Failed to warn safe-head notifier of safe-head reset", "safe", x.Safe)
+		if err := s.SafeHeadNotifs.SafeHeadReset(x.CrossSafe); err != nil {
+			s.Log.Error("Failed to warn safe-head notifier of safe-head reset", "safe", x.CrossSafe)
 			return
 		}
-		if s.SafeHeadNotifs.Enabled() && x.Safe.ID() == s.Config.Genesis.L2 {
+		if s.SafeHeadNotifs.Enabled() && x.CrossSafe.ID() == s.Config.Genesis.L2 {
 			// The rollup genesis block is always safe by definition. So if the pipeline resets this far back we know
 			// we will process all safe head updates and can record genesis as always safe from L1 genesis.
 			// Note that it is not safe to use cfg.Genesis.L1 here as it is the block immediately before the L2 genesis
@@ -376,16 +382,22 @@ func (s *SyncDeriver) onEngineConfirmedReset(x engine.EngineResetConfirmedEvent)
 				s.Log.Error("Failed to retrieve L1 genesis, cannot notify genesis as safe block", "err", err)
 				return
 			}
-			if err := s.SafeHeadNotifs.SafeHeadUpdated(x.Safe, l1Genesis.ID()); err != nil {
+			if err := s.SafeHeadNotifs.SafeHeadUpdated(x.CrossSafe, l1Genesis.ID()); err != nil {
 				s.Log.Error("Failed to notify safe-head listener of safe-head", "err", err)
 				return
 			}
 		}
 	}
+	s.Log.Info("Confirming pipeline reset")
 	s.Emitter.Emit(derive.ConfirmPipelineResetEvent{})
 }
 
 func (s *SyncDeriver) onResetEvent(x rollup.ResetEvent) {
+	if s.ManagedMode {
+		s.Log.Warn("Encountered reset in Managed Mode, waiting for op-supervisor", "err", x.Err)
+		// ManagedMode will pick up the ResetEvent
+		return
+	}
 	// If the system corrupts, e.g. due to a reorg, simply reset it
 	s.Log.Warn("Deriver system is resetting", "err", x.Err)
 	s.Emitter.Emit(StepReqEvent{})
@@ -444,7 +456,7 @@ func (s *SyncDeriver) SyncStep() {
 
 	// If interop is configured, we have to run the engine events,
 	// to ensure cross-L2 safety is continuously verified against the interop-backend.
-	if s.Config.InteropTime != nil {
+	if s.Config.InteropTime != nil && !s.ManagedMode {
 		s.Emitter.Emit(engine.CrossUpdateRequestEvent{})
 	}
 }

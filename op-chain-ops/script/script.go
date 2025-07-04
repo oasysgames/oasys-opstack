@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum-optimism/optimism/op-chain-ops/script/addresses"
 	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -19,13 +21,13 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/hashdb"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/foundry"
+	"github.com/ethereum-optimism/optimism/op-chain-ops/script/forking"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/srcmap"
 )
 
@@ -72,9 +74,12 @@ type Host struct {
 	af       *foundry.ArtifactsFS
 	chainCfg *params.ChainConfig
 	env      *vm.EVM
-	state    *state.StateDB
-	stateDB  state.Database
-	rawDB    ethdb.Database
+
+	state     *forking.ForkableState
+	baseState *state.StateDB
+
+	// only known contracts may utilize cheatcodes and logging
+	allowedCheatcodes map[common.Address]struct{}
 
 	cheatcodes *Precompile[*CheatCodesPrecompile]
 	console    *Precompile[*ConsolePrecompile]
@@ -117,11 +122,18 @@ type BroadcastHook func(broadcast Broadcast)
 
 type Hooks struct {
 	OnBroadcast BroadcastHook
+	OnFork      ForkHook
 }
 
 func WithBroadcastHook(hook BroadcastHook) HostOption {
 	return func(h *Host) {
 		h.hooks.OnBroadcast = hook
+	}
+}
+
+func WithForkHook(hook ForkHook) HostOption {
+	return func(h *Host) {
+		h.hooks.OnFork = hook
 	}
 }
 
@@ -167,7 +179,11 @@ func NewHost(
 		srcMaps:          make(map[common.Address]*srcmap.SourceMap),
 		hooks: &Hooks{
 			OnBroadcast: func(broadcast Broadcast) {},
+			OnFork: func(opts *ForkConfig) (forking.ForkSource, error) {
+				return nil, errors.New("no forking configured")
+			},
 		},
+		allowedCheatcodes: make(map[common.Address]struct{}),
 	}
 
 	for _, opt := range options {
@@ -193,12 +209,13 @@ func NewHost(
 		GrayGlacierBlock:    big.NewInt(0),
 		MergeNetsplitBlock:  big.NewInt(0),
 		// Ethereum forks in proof-of-stake era.
-		TerminalTotalDifficulty:       big.NewInt(1),
-		TerminalTotalDifficultyPassed: true,
-		ShanghaiTime:                  new(uint64),
-		CancunTime:                    new(uint64),
-		PragueTime:                    nil,
-		VerkleTime:                    nil,
+		TerminalTotalDifficulty: big.NewInt(1),
+		ShanghaiTime:            new(uint64),
+		CancunTime:              new(uint64),
+		PragueTime:              nil,
+		VerkleTime:              nil,
+		// Select default Ethereum prod blob schedules
+		BlobScheduleConfig: params.DefaultBlobSchedule,
 		// OP-Stack forks are disabled, since we use this for L1.
 		BedrockBlock: nil,
 		RegolithTime: nil,
@@ -212,18 +229,19 @@ func NewHost(
 	}
 
 	// Create an in-memory database, to host our temporary script state changes
-	h.rawDB = rawdb.NewMemoryDatabase()
-	h.stateDB = state.NewDatabase(triedb.NewDatabase(h.rawDB, &triedb.Config{
+	rawDB := rawdb.NewMemoryDatabase()
+	stateDB := state.NewDatabase(triedb.NewDatabase(rawDB, &triedb.Config{
 		Preimages: true, // To be able to iterate the state we need the Preimages
 		IsVerkle:  false,
 		HashDB:    hashdb.Defaults,
 		PathDB:    nil,
 	}), nil)
 	var err error
-	h.state, err = state.New(types.EmptyRootHash, h.stateDB)
+	h.baseState, err = state.New(types.EmptyRootHash, stateDB)
 	if err != nil {
 		panic(fmt.Errorf("failed to create memory state db: %w", err))
 	}
+	h.state = forking.NewForkableState(h.baseState)
 
 	// Initialize a block-context for the EVM to access environment variables.
 	// The block context (after embedding inside of the EVM environment) may be mutated later.
@@ -252,7 +270,7 @@ func NewHost(
 		GasPrice:     big.NewInt(0),
 		BlobHashes:   executionContext.BlobHashes,
 		BlobFeeCap:   big.NewInt(0),
-		AccessEvents: state.NewAccessEvents(h.stateDB.PointCache()),
+		AccessEvents: state.NewAccessEvents(h.baseState.PointCache()),
 	}
 
 	// Hook up the Host to capture the EVM environment changes
@@ -273,9 +291,22 @@ func NewHost(
 		CallerOverride:      h.handleCaller,
 	}
 
-	h.env = vm.NewEVM(blockContext, txContext, h.state, h.chainCfg, vmCfg)
+	h.env = vm.NewEVM(blockContext, h.state, h.chainCfg, vmCfg)
+	h.env.SetTxContext(txContext)
 
 	return h
+}
+
+// AllowCheatcodes allows the given address to utilize the cheatcodes and logging precompiles
+func (h *Host) AllowCheatcodes(addr common.Address) {
+	h.log.Trace("Allowing cheatcodes", "address", addr, "label", h.labels[addr])
+	h.allowedCheatcodes[addr] = struct{}{}
+}
+
+// AllowedCheatcodes returns whether the given address is allowed to use cheatcodes
+func (h *Host) AllowedCheatcodes(addr common.Address) bool {
+	_, ok := h.allowedCheatcodes[addr]
+	return ok
 }
 
 // EnableCheats enables the Forge/HVM cheat-codes precompile and the Hardhat-style console2 precompile.
@@ -288,8 +319,8 @@ func (h *Host) EnableCheats() error {
 	// Solidity does EXTCODESIZE checks on functions without return-data.
 	// We need to insert some placeholder code to prevent it from aborting calls.
 	// Emulates Forge script: https://github.com/foundry-rs/foundry/blob/224fe9cbf76084c176dabf7d3b2edab5df1ab818/crates/evm/evm/src/executors/mod.rs#L108
-	h.state.SetCode(VMAddr, []byte{0x00})
-	h.precompiles[VMAddr] = h.cheatcodes
+	h.state.SetCode(addresses.VMAddr, []byte{0x00})
+	h.precompiles[addresses.VMAddr] = h.cheatcodes
 
 	consolePrecompile, err := NewPrecompile[*ConsolePrecompile](&ConsolePrecompile{
 		logger: h.log,
@@ -299,7 +330,7 @@ func (h *Host) EnableCheats() error {
 		return fmt.Errorf("failed to init console precompile: %w", err)
 	}
 	h.console = consolePrecompile
-	h.precompiles[ConsoleAddr] = h.console
+	h.precompiles[addresses.ConsoleAddr] = h.console
 	// The Console precompile does not need bytecode,
 	// calls all go through a console lib, which avoids the EXTCODESIZE.
 	return nil
@@ -315,7 +346,7 @@ func (h *Host) prelude(from common.Address, to *common.Address) {
 // Call calls a contract in the EVM. The state changes persist.
 func (h *Host) Call(from common.Address, to common.Address, input []byte, gas uint64, value *uint256.Int) (returnData []byte, leftOverGas uint64, err error) {
 	h.prelude(from, &to)
-	return h.env.Call(vm.AccountRef(from), to, input, gas, value)
+	return h.env.Call(from, to, input, gas, value)
 }
 
 // LoadContract loads the bytecode of a contract, and deploys it with regular CREATE.
@@ -355,7 +386,7 @@ func (h *Host) RememberArtifact(addr common.Address, artifact *foundry.Artifact,
 // This create function helps deploy contracts quickly for scripting etc.
 func (h *Host) Create(from common.Address, initCode []byte) (common.Address, error) {
 	h.prelude(from, nil)
-	ret, addr, _, err := h.env.Create(vm.AccountRef(from),
+	ret, addr, _, err := h.env.Create(from,
 		initCode, DefaultFoundryGasLimit, uint256.NewInt(0))
 	if err != nil {
 		retStr := fmt.Sprintf("%x", ret)
@@ -373,13 +404,13 @@ func (h *Host) Wipe(addr common.Address) {
 	if h.state.GetCodeSize(addr) > 0 {
 		h.state.SetCode(addr, nil)
 	}
-	h.state.SetNonce(addr, 0)
+	h.state.SetNonce(addr, 0, tracing.NonceChangeUnspecified)
 	h.state.SetBalance(addr, uint256.NewInt(0), tracing.BalanceChangeUnspecified)
 }
 
 // SetNonce sets an account's nonce in state.
 func (h *Host) SetNonce(addr common.Address, nonce uint64) {
-	h.state.SetNonce(addr, nonce)
+	h.state.SetNonce(addr, nonce, tracing.NonceChangeUnspecified)
 }
 
 // GetNonce returs an account's nonce from state.
@@ -404,17 +435,21 @@ func (h *Host) ImportAccount(addr common.Address, account types.Account) {
 		balance = uint256.MustFromBig(account.Balance)
 	}
 	h.state.SetBalance(addr, balance, tracing.BalanceChangeUnspecified)
-	h.state.SetNonce(addr, account.Nonce)
+	h.state.SetNonce(addr, account.Nonce, tracing.NonceChangeUnspecified)
 	h.state.SetCode(addr, account.Code)
 	for key, value := range account.Storage {
 		h.state.SetState(addr, key, value)
 	}
 }
 
+func (h *Host) SetStorage(addr common.Address, key common.Hash, value common.Hash) {
+	h.state.SetState(addr, key, value)
+}
+
 // getPrecompile overrides any accounts during runtime, to insert special precompiles, if activated.
 func (h *Host) getPrecompile(rules params.Rules, original vm.PrecompiledContract, addr common.Address) vm.PrecompiledContract {
 	if p, ok := h.precompiles[addr]; ok {
-		return p
+		return &AccessControlledPrecompile{h: h, inner: p}
 	}
 	return original
 }
@@ -462,7 +497,7 @@ func (h *Host) onEnter(depth int, typ byte, from common.Address, to common.Addre
 	if !parentCallFrame.Prank.Broadcast {
 		return
 	}
-	if to == VMAddr || to == ConsoleAddr { // no broadcasts to the cheatcode or console address
+	if to == addresses.VMAddr || to == addresses.ConsoleAddr { // no broadcasts to the cheatcode or console address
 		return
 	}
 
@@ -472,7 +507,7 @@ func (h *Host) onEnter(depth int, typ byte, from common.Address, to common.Addre
 		if parentCallFrame.Prank.Sender != nil {
 			sender = *parentCallFrame.Prank.Sender
 		}
-		h.state.SetNonce(sender, h.state.GetNonce(sender)+1)
+		h.state.SetNonce(sender, h.state.GetNonce(sender)+1, tracing.NonceChangeUnspecified)
 	}
 
 	if h.isolateBroadcasts {
@@ -498,9 +533,9 @@ func (h *Host) onExit(depth int, output []byte, gasUsed uint64, err error, rever
 	if reverted {
 		h.LogCallStack()
 		if msg, revertInspectErr := abi.UnpackRevert(output); revertInspectErr == nil {
-			h.log.Warn("Revert", "addr", addr, "err", err, "revertMsg", msg, "depth", depth)
+			h.log.Warn("Revert", "addr", addr, "label", h.labels[addr], "err", err, "revertMsg", msg, "depth", depth)
 		} else {
-			h.log.Warn("Revert", "addr", addr, "err", err, "revertData", hexutil.Bytes(output), "depth", depth)
+			h.log.Warn("Revert", "addr", addr, "label", h.labels[addr], "err", err, "revertData", hexutil.Bytes(output), "depth", depth)
 		}
 	}
 
@@ -510,7 +545,7 @@ func (h *Host) onExit(depth int, output []byte, gasUsed uint64, err error, rever
 
 // onFault is a trace-hook, catches things more generic than regular EVM reverts.
 func (h *Host) onFault(pc uint64, op byte, gas, cost uint64, scope tracing.OpContext, depth int, err error) {
-	h.log.Warn("Fault", "addr", scope.Address(), "err", err, "depth", depth)
+	h.log.Warn("Fault", "addr", scope.Address(), "label", h.labels[scope.Address()], "err", err, "depth", depth)
 }
 
 // unwindCallstack is a helper to remove call-stack entries.
@@ -534,6 +569,7 @@ func (h *Host) unwindCallstack(depth int) {
 							"from", bcast.From,
 							"to", bcast.To,
 							"input", bcast.Input,
+							"input_len", len(bcast.Input),
 							"value", bcast.Value,
 							"type", bcast.Type,
 						)
@@ -561,6 +597,13 @@ func (h *Host) unwindCallstack(depth int) {
 func (h *Host) onOpcode(pc uint64, op byte, gas, cost uint64, scope tracing.OpContext, rData []byte, depth int, err error) {
 	h.unwindCallstack(depth)
 	scopeCtx := scope.(*vm.ScopeContext)
+	if scopeCtx.Contract.IsDeployment {
+		// If we are not yet allowed access to cheatcodes, but if the caller is,
+		// and if this is a contract-creation, then we are automatically granted cheatcode access.
+		if !h.AllowedCheatcodes(scopeCtx.Address()) && h.AllowedCheatcodes(scopeCtx.Caller()) {
+			h.AllowCheatcodes(scopeCtx.Address())
+		}
+	}
 	// Check if we are entering a new depth, add it to the call-stack if so.
 	// We do this here, instead of onEnter, to capture an initialized scope.
 	if len(h.callStack) == 0 || h.callStack[len(h.callStack)-1].Depth < depth {
@@ -573,7 +616,7 @@ func (h *Host) onOpcode(pc uint64, op byte, gas, cost uint64, scope tracing.OpCo
 		})
 	}
 	// Sanity check that top of the call-stack matches the scope context now
-	if len(h.callStack) == 0 || h.callStack[len(h.callStack)-1].Ctx != scopeCtx {
+	if h.callStack[len(h.callStack)-1].Ctx != scopeCtx {
 		panic("scope context changed without call-frame pop/push")
 	}
 	cf := h.callStack[len(h.callStack)-1]
@@ -609,11 +652,11 @@ func (h *Host) onLog(ev *types.Log) {
 
 // CurrentCall returns the top of the callstack. Or zeroed if there was no call frame yet.
 // If zeroed, the call-frame has a nil scope context.
-func (h *Host) CurrentCall() CallFrame {
+func (h *Host) CurrentCall() *CallFrame {
 	if len(h.callStack) == 0 {
-		return CallFrame{}
+		return &CallFrame{}
 	}
-	return *h.callStack[len(h.callStack)-1]
+	return h.callStack[len(h.callStack)-1]
 }
 
 // MsgSender returns the msg.sender of the current active EVM call-frame,
@@ -652,27 +695,35 @@ func (h *Host) SetEnvVar(key string, value string) {
 // After flushing the EVM state also cannot revert to a previous snapshot state:
 // the state should not be dumped within contract-execution that needs to revert.
 func (h *Host) StateDump() (*foundry.ForgeAllocs, error) {
+	if id, ok := h.state.ActiveFork(); ok {
+		return nil, fmt.Errorf("cannot state-dump while fork %s is active", id)
+	}
+	baseState := h.baseState
 	// We have to commit the existing state to the trie,
 	// for all the state-changes to be captured by the trie iterator.
-	root, err := h.state.Commit(h.env.Context.BlockNumber.Uint64(), true)
+	root, err := baseState.Commit(h.env.Context.BlockNumber.Uint64(), true, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to commit state: %w", err)
 	}
 	// We need a state object around the state DB
-	st, err := state.New(root, h.stateDB)
+	st, err := state.New(root, baseState.Database())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create state object for state-dumping: %w", err)
 	}
 	// After Commit we cannot reuse the old State, so we update the host to use the new one
-	h.state = st
-	h.env.StateDB = st
+	h.baseState = st
+	h.state.SubstituteBaseState(st)
 
+	// We use the new state object for state-dumping & future state-access, wrapped around
+	// the just committed trie that has all changes in it.
+	// I.e. the trie is committed and ready to provide all data,
+	// and the state is new and iterable, prepared specifically for FromState(state).
 	var allocs foundry.ForgeAllocs
 	allocs.FromState(st)
 
 	// Sanity check we have no lingering scripts.
-	for i := uint64(0); i <= allocs.Accounts[ScriptDeployer].Nonce; i++ {
-		scriptAddr := crypto.CreateAddress(ScriptDeployer, i)
+	for i := uint64(0); i <= allocs.Accounts[addresses.ScriptDeployer].Nonce; i++ {
+		scriptAddr := crypto.CreateAddress(addresses.ScriptDeployer, i)
 		h.log.Info("removing script from state-dump", "addr", scriptAddr, "label", h.labels[scriptAddr])
 		delete(allocs.Accounts, scriptAddr)
 	}
@@ -694,12 +745,12 @@ func (h *Host) StateDump() (*foundry.ForgeAllocs, error) {
 	}
 
 	// Remove the script deployer from the output
-	delete(allocs.Accounts, ScriptDeployer)
-	delete(allocs.Accounts, ForgeDeployer)
+	delete(allocs.Accounts, addresses.ScriptDeployer)
+	delete(allocs.Accounts, addresses.ForgeDeployer)
 
 	// The cheatcodes VM has a placeholder bytecode,
 	// because solidity checks if the code exists prior to regular EVM-calls to it.
-	delete(allocs.Accounts, VMAddr)
+	delete(allocs.Accounts, addresses.VMAddr)
 
 	// Precompile overrides come with temporary state account placeholders. Ignore those.
 	for addr := range h.precompiles {
@@ -739,9 +790,6 @@ func (h *Host) LogCallStack() {
 	for _, cf := range h.callStack {
 		callsite := ""
 		srcMap, ok := h.srcMaps[cf.Ctx.Address()]
-		if !ok && cf.Ctx.Contract.CodeAddr != nil { // if delegate-call, we might know the implementation code.
-			srcMap, ok = h.srcMaps[*cf.Ctx.Contract.CodeAddr]
-		}
 		if ok {
 			callsite = srcMap.FormattedInfo(cf.LastPC)
 			if callsite == "unknown:0:0" && len(cf.LastJumps) > 0 {
@@ -776,11 +824,11 @@ func (h *Host) Label(addr common.Address, label string) {
 
 // NewScriptAddress creates a new address for the ScriptDeployer account, and bumps the nonce.
 func (h *Host) NewScriptAddress() common.Address {
-	deployer := ScriptDeployer
+	deployer := addresses.ScriptDeployer
 	deployNonce := h.state.GetNonce(deployer)
 	// compute address of script contract to be deployed
 	addr := crypto.CreateAddress(deployer, deployNonce)
-	h.state.SetNonce(deployer, deployNonce+1)
+	h.state.SetNonce(deployer, deployNonce+1, tracing.NonceChangeUnspecified)
 	return addr
 }
 
@@ -804,4 +852,16 @@ func (h *Host) RememberOnLabel(label, srcFile, contract string) error {
 		}
 	})
 	return nil
+}
+
+func (h *Host) CreateSelectFork(opts ...ForkOption) (*big.Int, error) {
+	src, err := h.onFork(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup fork source: %w", err)
+	}
+	id, err := h.state.CreateSelectFork(src)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create-select fork: %w", err)
+	}
+	return id.U256().ToBig(), nil
 }

@@ -3,12 +3,13 @@ pragma solidity 0.8.15;
 
 // Contracts
 import { OptimismPortal2 } from "src/L1/OptimismPortal2.sol";
-import { L1BlockInterop, ConfigType } from "src/L2/L1BlockInterop.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Constants } from "src/libraries/Constants.sol";
-import { Unauthorized } from "src/libraries/PortalErrors.sol";
+
+// Interfaces
+import { IL1BlockInterop, ConfigType } from "interfaces/L2/IL1BlockInterop.sol";
 
 /// @custom:proxied true
 /// @title OptimismPortalInterop
@@ -16,23 +17,19 @@ import { Unauthorized } from "src/libraries/PortalErrors.sol";
 ///         and L2. Messages sent directly to the OptimismPortal have no form of replayability.
 ///         Users are encouraged to use the L1CrossDomainMessenger for a higher-level interface.
 contract OptimismPortalInterop is OptimismPortal2 {
-    constructor(
-        uint256 _proofMaturityDelaySeconds,
-        uint256 _disputeGameFinalityDelaySeconds
-    )
-        OptimismPortal2(_proofMaturityDelaySeconds, _disputeGameFinalityDelaySeconds)
-    { }
+    /// @param _proofMaturityDelaySeconds The proof maturity delay in seconds.
+    constructor(uint256 _proofMaturityDelaySeconds) OptimismPortal2(_proofMaturityDelaySeconds) { }
 
-    /// @custom:semver +interop-beta.2
+    /// @custom:semver +interop.4
     function version() public pure override returns (string memory) {
-        return string.concat(super.version(), "+interop-beta.2");
+        return string.concat(super.version(), "+interop.4");
     }
 
     /// @notice Sets static configuration options for the L2 system.
     /// @param _type  Type of configuration to set.
     /// @param _value Encoded value of the configuration.
     function setConfig(ConfigType _type, bytes memory _value) external {
-        if (msg.sender != address(systemConfig)) revert Unauthorized();
+        if (msg.sender != address(systemConfig)) revert OptimismPortal_Unauthorized();
 
         // Set L2 deposit gas as used without paying burning gas. Ensures that deposits cannot use too much L2 gas.
         // This value must be large enough to cover the cost of calling `L1Block.setConfig`.
@@ -48,7 +45,7 @@ contract OptimismPortalInterop is OptimismPortal2 {
                 uint256(0), // value
                 uint64(SYSTEM_DEPOSIT_GAS_LIMIT), // gasLimit
                 false, // isCreation,
-                abi.encodeCall(L1BlockInterop.setConfig, (_type, _value))
+                abi.encodeCall(IL1BlockInterop.setConfig, (_type, _value))
             )
         );
     }
