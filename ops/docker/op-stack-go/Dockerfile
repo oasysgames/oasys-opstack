@@ -146,20 +146,22 @@ ARG OP_DRIPPER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd op-dripper && make op-dripper  \
   GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_DRIPPER_VERSION"
 
-FROM $TARGET_BASE_IMAGE AS cannon-target
+# Note: Must use appbase as base image - TARGET_BASE_IMAGE causes certificate errors
+
+FROM appbase AS cannon-target
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 COPY --from=cannon-builder /app/cannon/multicannon/embeds/* /usr/local/bin/
 CMD ["cannon"]
 
-FROM $TARGET_BASE_IMAGE AS op-program-target
+FROM appbase AS op-program-target
 COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
 CMD ["op-program"]
 
-FROM $TARGET_BASE_IMAGE AS op-wheel-target
+FROM appbase AS op-wheel-target
 COPY --from=op-wheel-builder /app/op-wheel/bin/op-wheel /usr/local/bin/
 CMD ["op-wheel"]
 
-FROM $TARGET_BASE_IMAGE AS op-node-target
+FROM appbase AS op-node-target
 COPY --from=op-node-builder /app/op-node/bin/op-node /usr/local/bin/
 CMD ["op-node"]
 
@@ -182,34 +184,36 @@ COPY --from=kona /asterisc /usr/local/bin/
 ENV OP_CHALLENGER_ASTERISC_BIN=/usr/local/bin/asterisc
 CMD ["op-challenger"]
 
-FROM $TARGET_BASE_IMAGE AS op-dispute-mon-target
+# Note: Must use appbase as base image - TARGET_BASE_IMAGE causes certificate errors
+
+FROM appbase AS op-dispute-mon-target
 COPY --from=op-dispute-mon-builder /app/op-dispute-mon/bin/op-dispute-mon /usr/local/bin/
 CMD ["op-dispute-mon"]
 
-FROM $TARGET_BASE_IMAGE AS op-batcher-target
+FROM appbase AS op-batcher-target
 COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
 CMD ["op-batcher"]
 
-FROM $TARGET_BASE_IMAGE AS op-proposer-target
+FROM appbase AS op-proposer-target
 COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
 CMD ["op-proposer"]
 
-FROM $TARGET_BASE_IMAGE AS op-conductor-target
+FROM appbase AS op-conductor-target
 COPY --from=op-conductor-builder /app/op-conductor/bin/op-conductor /usr/local/bin/
 CMD ["op-conductor"]
 
-FROM $TARGET_BASE_IMAGE AS da-server-target
+FROM appbase AS da-server-target
 COPY --from=da-server-builder /app/op-alt-da/bin/da-server /usr/local/bin/
 CMD ["da-server"]
 
-FROM $TARGET_BASE_IMAGE AS op-supervisor-target
+FROM appbase AS op-supervisor-target
 COPY --from=op-supervisor-builder /app/op-supervisor/bin/op-supervisor /usr/local/bin/
 CMD ["op-supervisor"]
 
-FROM $TARGET_BASE_IMAGE AS op-deployer-target
+FROM appbase AS op-deployer-target
 COPY --from=op-deployer-builder /app/op-chain-ops/bin/op-deployer /usr/local/bin/
 CMD ["op-deployer"]
 
-FROM $TARGET_BASE_IMAGE AS op-dripper-target
+FROM appbase AS op-dripper-target
 COPY --from=op-dripper-builder /app/op-dripper/bin/op-dripper /usr/local/bin/
 CMD ["op-dripper"]
