@@ -39,3 +39,4 @@ jobs:
           files: docker-bake.hcl
           set: '*.platform=linux/amd64,linux/arm64'
           push: true
+          targets: op-batcher
