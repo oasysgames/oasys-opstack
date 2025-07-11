@@ -23,10 +23,7 @@ ARG ASTERISC_VERSION=none
 # We may be cross-building for another platform. Specify which platform we need as builder.
 FROM --platform=$BUILDPLATFORM golang:1.22.7-bullseye AS builder
 
-<<<<<<< HEAD
 RUN apt update && apt install -y git jq bash ca-certificates
-=======
-RUN apk add --no-cache curl tar gzip make gcc musl-dev linux-headers git jq bash
 
 # Install mise (the apk version is outdated)
 RUN curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
@@ -40,7 +37,6 @@ RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$TARG
 # Install versioned toolchain
 COPY ./mise.toml .
 RUN mise trust && mise install -v -y just && cp $(mise which just) /usr/local/bin/just && just --version
->>>>>>> v1.13.2
 
 # We copy the go.mod/sum first, so the `go mod download` does not have to re-run if dependencies do not change.
 COPY ./go.mod /app/go.mod
@@ -149,21 +145,16 @@ ARG OP_NODE_VERSION=v0.0.0
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd op-chain-ops && make op-deployer  \
   GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_DEPLOYER_VERSION"
 
-<<<<<<< HEAD
-FROM appbase AS cannon-target
-=======
 FROM --platform=$BUILDPLATFORM builder AS op-dripper-builder
 ARG OP_DRIPPER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd op-dripper && make op-dripper  \
   GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_DRIPPER_VERSION"
 
-FROM $TARGET_BASE_IMAGE AS cannon-target
->>>>>>> v1.13.2
+FROM appbase AS cannon-target
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 COPY --from=cannon-builder /app/cannon/multicannon/embeds/* /usr/local/bin/
 CMD ["cannon"]
 
-<<<<<<< HEAD
 FROM appbase AS op-program-target
 COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
 CMD ["op-program"]
@@ -176,20 +167,6 @@ FROM appbase AS op-node-target
 COPY --from=op-node-builder /app/op-node/bin/op-node /usr/local/bin/
 CMD ["op-node"]
 
-FROM appbase AS op-challenger-target
-=======
-FROM $TARGET_BASE_IMAGE AS op-program-target
-COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
-CMD ["op-program"]
-
-FROM $TARGET_BASE_IMAGE AS op-wheel-target
-COPY --from=op-wheel-builder /app/op-wheel/bin/op-wheel /usr/local/bin/
-CMD ["op-wheel"]
-
-FROM $TARGET_BASE_IMAGE AS op-node-target
-COPY --from=op-node-builder /app/op-node/bin/op-node /usr/local/bin/
-CMD ["op-node"]
-
 # Make the kona docker image published by upstream available as a source to copy kona from.
 FROM ghcr.io/op-rs/kona/kona-host:$KONA_VERSION AS kona
 # Make the asterisc docker image published by upstream available as a source to copy asterisc from.
@@ -198,7 +175,6 @@ FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/asterisc:$ASTERISC_VERSION 
 # Also produce an op-challenger loaded with kona and asterisc using ubuntu
 FROM $UBUNTU_TARGET_BASE_IMAGE AS op-challenger-target
 RUN apt-get update && apt-get install -y --no-install-recommends musl openssl ca-certificates
->>>>>>> v1.13.2
 COPY --from=op-challenger-builder /app/op-challenger/bin/op-challenger /usr/local/bin/
 # Copy in op-program and cannon
 COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
@@ -212,7 +188,6 @@ COPY --from=asterisc /usr/local/bin/asterisc /usr/local/bin/
 ENV OP_CHALLENGER_ASTERISC_BIN=/usr/local/bin/asterisc
 CMD ["op-challenger"]
 
-<<<<<<< HEAD
 FROM appbase AS op-dispute-mon-target
 COPY --from=op-dispute-mon-builder /app/op-dispute-mon/bin/op-dispute-mon /usr/local/bin/
 CMD ["op-dispute-mon"]
@@ -238,36 +213,9 @@ COPY --from=op-supervisor-builder /app/op-supervisor/bin/op-supervisor /usr/loca
 CMD ["op-supervisor"]
 
 FROM appbase AS op-deployer-target
-=======
-FROM $TARGET_BASE_IMAGE AS op-dispute-mon-target
-COPY --from=op-dispute-mon-builder /app/op-dispute-mon/bin/op-dispute-mon /usr/local/bin/
-CMD ["op-dispute-mon"]
-
-FROM $TARGET_BASE_IMAGE AS op-batcher-target
-COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
-CMD ["op-batcher"]
-
-FROM $TARGET_BASE_IMAGE AS op-proposer-target
-COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
-CMD ["op-proposer"]
-
-FROM $TARGET_BASE_IMAGE AS op-conductor-target
-COPY --from=op-conductor-builder /app/op-conductor/bin/op-conductor /usr/local/bin/
-CMD ["op-conductor"]
-
-FROM $TARGET_BASE_IMAGE AS da-server-target
-COPY --from=da-server-builder /app/op-alt-da/bin/da-server /usr/local/bin/
-CMD ["da-server"]
-
-FROM $TARGET_BASE_IMAGE AS op-supervisor-target
-COPY --from=op-supervisor-builder /app/op-supervisor/bin/op-supervisor /usr/local/bin/
-CMD ["op-supervisor"]
-
-FROM $TARGET_BASE_IMAGE AS op-deployer-target
->>>>>>> v1.13.2
 COPY --from=op-deployer-builder /app/op-chain-ops/bin/op-deployer /usr/local/bin/
 CMD ["op-deployer"]
 
-FROM $TARGET_BASE_IMAGE AS op-dripper-target
+FROM appbase AS op-dripper-target
 COPY --from=op-dripper-builder /app/op-dripper/bin/op-dripper /usr/local/bin/
 CMD ["op-dripper"]

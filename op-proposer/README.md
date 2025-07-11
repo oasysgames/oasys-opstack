@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-## List of Changes by Oasys:
-- Introduced the --omit-l1blockhash-in-proposals flag to assist verses that are stuck in L2 output root proposal due to a delay in proposing more than 256 blocks on L1. [#129](https://github.com/oasysgames/oasys-opstack/pull/129)
-=======
 # `op-proposer`
 
 Issues: [monorepo](https://github.com/ethereum-optimism/optimism/issues?q=is%3Aissue%20state%3Aopen%20label%3AA-op-proposer)
@@ -156,4 +152,6 @@ Assuming finality, the op-proposer is only really subject to liveness failures:
 ## Testing
 
 The `op-proposer` integration is covered in system `op-e2e` tests.
->>>>>>> v1.13.2
+
+## List of Changes by Oasys:
+- Introduced the --omit-l1blockhash-in-proposals flag to assist verses that are stuck in L2 output root proposal due to a delay in proposing more than 256 blocks on L1. [#129](https://github.com/oasysgames/oasys-opstack/pull/129)

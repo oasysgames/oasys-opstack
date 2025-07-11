@@ -81,18 +81,14 @@ variable "OP_DEPLOYER_VERSION" {
   default = "${GIT_VERSION}"
 }
 
-<<<<<<< HEAD
-group "default" {
-  targets = ["op-node", "op-batcher", "op-proposer"]
-}
-
-=======
 variable "OP_DRIPPER_VERSION" {
   default = "${GIT_VERSION}"
 }
 
+group "default" {
+  targets = ["op-node", "op-batcher", "op-proposer"]
+}
 
->>>>>>> v1.13.2
 target "op-node" {
   dockerfile = "ops/docker/op-stack-go/Dockerfile"
   context = "."
