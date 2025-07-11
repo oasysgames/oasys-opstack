@@ -11,14 +11,27 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/p2p"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
 	"github.com/ethereum-optimism/optimism/op-service/endpoint"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
 type Opnode struct {
 	node *rollupNode.OpNode
 }
 
+func (o *Opnode) InteropRPC() (endpoint string, jwtSecret eth.Bytes32) {
+	return o.node.InteropRPC()
+}
+
+func (o *Opnode) InteropRPCPort() (int, error) {
+	return o.node.InteropRPCPort()
+}
+
 func (o *Opnode) UserRPC() endpoint.RPC {
 	return endpoint.HttpURL(o.node.HTTPEndpoint())
+}
+
+func (o *Opnode) UserRPCPort() (int, error) {
+	return o.node.HTTPPort()
 }
 
 func (o *Opnode) Stop(ctx context.Context) error {
