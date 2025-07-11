@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
@@ -18,6 +19,8 @@ import (
 
 var ErrReorg = errors.New("block does not extend existing chain")
 
+type ChannelOutFactory func(cfg ChannelConfig, rollupCfg *rollup.Config) (derive.ChannelOut, error)
+
 // channelManager stores a contiguous set of blocks & turns them into channels.
 // Upon receiving tx confirmation (or a tx failure), it does channel error handling.
 //
@@ -31,6 +34,8 @@ type channelManager struct {
 	metr        metrics.Metricer
 	cfgProvider ChannelConfigProvider
 	rollupCfg   *rollup.Config
+
+	outFactory ChannelOutFactory
 
 	// All blocks since the last request for new tx data.
 	blocks queue.Queue[*types.Block]
@@ -59,8 +64,13 @@ func NewChannelManager(log log.Logger, metr metrics.Metricer, cfgProvider Channe
 		cfgProvider: cfgProvider,
 		defaultCfg:  cfgProvider.ChannelConfig(),
 		rollupCfg:   rollupCfg,
+		outFactory:  NewChannelOut,
 		txChannels:  make(map[string]*channel),
 	}
+}
+
+func (s *channelManager) SetChannelOutFactory(outFactory ChannelOutFactory) {
+	s.outFactory = outFactory
 }
 
 // Clear clears the entire state of the channel manager.
@@ -106,11 +116,14 @@ func (s *channelManager) TxConfirmed(_id txID, inclusionBlock eth.BlockID) {
 	id := _id.String()
 	if channel, ok := s.txChannels[id]; ok {
 		delete(s.txChannels, id)
-		done, blocks := channel.TxConfirmed(id, inclusionBlock)
+		done, blocksToRequeue := channel.TxConfirmed(id, inclusionBlock)
 		if done {
 			s.removePendingChannel(channel)
-			if len(blocks) > 0 {
-				s.blocks.Prepend(blocks...)
+			if len(blocksToRequeue) > 0 {
+				s.blocks.Prepend(blocksToRequeue...)
+			}
+			for _, b := range blocksToRequeue {
+				s.metr.RecordL2BlockInPendingQueue(b)
 			}
 		}
 	} else {
@@ -265,10 +278,13 @@ func (s *channelManager) ensureChannelWithSpace(l1Head eth.BlockID) error {
 	// This will be reassessed at channel submission-time,
 	// but this is our best guess at the appropriate values for now.
 	cfg := s.defaultCfg
-	pc, err := newChannel(s.log, s.metr, cfg, s.rollupCfg, s.l1OriginLastClosedChannel.Number)
+
+	channelOut, err := s.outFactory(cfg, s.rollupCfg)
 	if err != nil {
-		return fmt.Errorf("creating new channel: %w", err)
+		return fmt.Errorf("creating channel out: %w", err)
 	}
+
+	pc := newChannel(s.log, s.metr, cfg, s.rollupCfg, s.l1OriginLastClosedChannel.Number, channelOut)
 
 	s.currentChannel = pc
 	s.channelQueue = append(s.channelQueue, pc)
@@ -493,7 +509,6 @@ func (s *channelManager) Requeue(newCfg ChannelConfig) {
 
 	// We put the blocks back at the front of the queue:
 	s.blocks.Prepend(blocksToRequeue...)
-
 	for _, b := range blocksToRequeue {
 		s.metr.RecordL2BlockInPendingQueue(b)
 	}
@@ -504,4 +519,17 @@ func (s *channelManager) Requeue(newCfg ChannelConfig) {
 	// Setting the defaultCfg will cause new channels
 	// to pick up the new ChannelConfig
 	s.defaultCfg = newCfg
+}
+
+// PendingDABytes returns the current number of bytes pending to be written to the DA layer (from blocks fetched from L2
+// but not yet in a channel).
+func (s *channelManager) PendingDABytes() int64 {
+	f := s.metr.PendingDABytes()
+	if f >= math.MaxInt64 {
+		return math.MaxInt64
+	}
+	if f <= math.MinInt64 {
+		return math.MinInt64
+	}
+	return int64(f)
 }
