@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/hashdb"
 
-	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/memory"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/crossdomain"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -360,73 +359,70 @@ func DiffTestUtils() {
 		// Print the output
 		fmt.Print(hexutil.Encode(packed[32:]))
 	case "cannonMemoryProof":
-		// <memAddr0, memValue0, [memAddr1, memValue1], [memAddr2, memValue2]>
-		// Generates memory proofs of `memAddr0` for a trie containing memValue0 and `memAddr1` for a trie containing memValue1 and memValue2
-		// For the cannon stf, this is equivalent to the prestate proofs of the program counter and memory access for instruction execution
+		// <pc, insn, [memAddr, memValue], [memAddr2, memValue2]>
+		// Generates a memory proof of `memAddr` for a trie containing memValue and memValue2
 		mem := memory.NewMemory()
 		if len(args) != 3 && len(args) != 5 && len(args) != 7 {
 			panic("Error: cannonMemoryProofWithProof requires 2, 4, or 6 arguments")
 		}
-		memAddr0, err := strconv.ParseUint(args[1], 10, arch.WordSize)
+		pc, err := strconv.ParseUint(args[1], 10, 32)
 		checkErr(err, "Error decoding addr")
-		memValue0, err := strconv.ParseUint(args[2], 10, arch.WordSize)
-		checkErr(err, "Error decoding memValue0")
-		mem.SetWord(arch.Word(memAddr0), arch.Word(memValue0))
+		insn, err := strconv.ParseUint(args[2], 10, 32)
+		checkErr(err, "Error decoding insn")
+		mem.SetUint32(uint32(pc), uint32(insn))
 
-		var proof1 []byte
+		var insnProof, memProof [896]byte
 		if len(args) >= 5 {
-			memAddr, err := strconv.ParseUint(args[3], 10, arch.WordSize)
+			memAddr, err := strconv.ParseUint(args[3], 10, 32)
 			checkErr(err, "Error decoding memAddr")
-			memValue, err := strconv.ParseUint(args[4], 10, arch.WordSize)
+			memValue, err := strconv.ParseUint(args[4], 10, 32)
 			checkErr(err, "Error decoding memValue")
-			mem.SetWord(arch.Word(memAddr), arch.Word(memValue))
-			proof := mem.MerkleProof(arch.Word(memAddr))
-			proof1 = proof[:]
+			mem.SetUint32(uint32(memAddr), uint32(memValue))
+			memProof = mem.MerkleProof(uint32(memAddr))
 		}
 		if len(args) == 7 {
-			memAddr, err := strconv.ParseUint(args[5], 10, arch.WordSize)
+			memAddr, err := strconv.ParseUint(args[5], 10, 32)
 			checkErr(err, "Error decoding memAddr")
-			memValue, err := strconv.ParseUint(args[6], 10, arch.WordSize)
+			memValue, err := strconv.ParseUint(args[6], 10, 32)
 			checkErr(err, "Error decoding memValue")
-			mem.SetWord(arch.Word(memAddr), arch.Word(memValue))
-			proof := mem.MerkleProof(arch.Word(memAddr))
-			proof1 = proof[:]
+			mem.SetUint32(uint32(memAddr), uint32(memValue))
+			memProof = mem.MerkleProof(uint32(memAddr))
 		}
-		proof0 := mem.MerkleProof(arch.Word(memAddr0))
+		insnProof = mem.MerkleProof(uint32(pc))
 
 		output := struct {
 			MemRoot common.Hash
 			Proof   []byte
 		}{
 			MemRoot: mem.MerkleRoot(),
-			Proof:   append(proof0[:], proof1...),
+			Proof:   append(insnProof[:], memProof[:]...),
 		}
 		packed, err := cannonMemoryProofArgs.Pack(&output)
 		checkErr(err, "Error encoding output")
 		fmt.Print(hexutil.Encode(packed[32:]))
 	case "cannonMemoryProof2":
-		// <memAddr0, memValue0, [memAddr1, memValue1], memAddr2>
-		// Generates memory proof of `memAddr2` for a trie containing `memValue0` and `memValue1`
+		// <pc, insn, [memAddr, memValue], memAddr2>
+		// Generates a memory proof of memAddr2 for a trie containing memValue
 		mem := memory.NewMemory()
 		if len(args) != 6 {
 			panic("Error: cannonMemoryProofWithProof2 requires 5 arguments")
 		}
-		memAddr0, err := strconv.ParseUint(args[1], 10, arch.WordSize)
+		pc, err := strconv.ParseUint(args[1], 10, 32)
 		checkErr(err, "Error decoding addr")
-		memValue0, err := strconv.ParseUint(args[2], 10, arch.WordSize)
-		checkErr(err, "Error decoding memValue0")
-		mem.SetWord(arch.Word(memAddr0), arch.Word(memValue0))
+		insn, err := strconv.ParseUint(args[2], 10, 32)
+		checkErr(err, "Error decoding insn")
+		mem.SetUint32(uint32(pc), uint32(insn))
 
-		var memProof [memory.MemProofSize]byte
-		memAddr, err := strconv.ParseUint(args[3], 10, arch.WordSize)
+		var memProof [896]byte
+		memAddr, err := strconv.ParseUint(args[3], 10, 32)
 		checkErr(err, "Error decoding memAddr")
-		memValue1, err := strconv.ParseUint(args[4], 10, arch.WordSize)
-		checkErr(err, "Error decoding memValue1")
-		mem.SetWord(arch.Word(memAddr), arch.Word(memValue1))
+		memValue, err := strconv.ParseUint(args[4], 10, 32)
+		checkErr(err, "Error decoding memValue")
+		mem.SetUint32(uint32(memAddr), uint32(memValue))
 
-		memAddr2, err := strconv.ParseUint(args[5], 10, arch.WordSize)
+		memAddr2, err := strconv.ParseUint(args[5], 10, 32)
 		checkErr(err, "Error decoding memAddr")
-		memProof = mem.MerkleProof(arch.Word(memAddr2))
+		memProof = mem.MerkleProof(uint32(memAddr2))
 
 		output := struct {
 			MemRoot common.Hash
@@ -439,27 +435,27 @@ func DiffTestUtils() {
 		checkErr(err, "Error encoding output")
 		fmt.Print(hexutil.Encode(packed[32:]))
 	case "cannonMemoryProofWrongLeaf":
-		// <memAddr0, memValue0, memAddr1, memValue1>
+		// <pc, insn, memAddr, memValue>
 		mem := memory.NewMemory()
 		if len(args) != 5 {
 			panic("Error: cannonMemoryProofWrongLeaf requires 4 arguments")
 		}
-		memAddr0, err := strconv.ParseUint(args[1], 10, arch.WordSize)
-		checkErr(err, "Error decoding memAddr0")
-		memValue0, err := strconv.ParseUint(args[2], 10, arch.WordSize)
-		checkErr(err, "Error decoding memValue0")
-		mem.SetWord(arch.Word(memAddr0), arch.Word(memValue0))
+		pc, err := strconv.ParseUint(args[1], 10, 32)
+		checkErr(err, "Error decoding addr")
+		insn, err := strconv.ParseUint(args[2], 10, 32)
+		checkErr(err, "Error decoding insn")
+		mem.SetUint32(uint32(pc), uint32(insn))
 
-		var insnProof, memProof [memory.MemProofSize]byte
-		memAddr1, err := strconv.ParseUint(args[3], 10, arch.WordSize)
-		checkErr(err, "Error decoding memAddr1")
-		memValue1, err := strconv.ParseUint(args[4], 10, arch.WordSize)
-		checkErr(err, "Error decoding memValue1")
-		mem.SetWord(arch.Word(memAddr1), arch.Word(memValue1))
+		var insnProof, memProof [896]byte
+		memAddr, err := strconv.ParseUint(args[3], 10, 32)
+		checkErr(err, "Error decoding memAddr")
+		memValue, err := strconv.ParseUint(args[4], 10, 32)
+		checkErr(err, "Error decoding memValue")
+		mem.SetUint32(uint32(memAddr), uint32(memValue))
 
 		// Compute a valid proof for the root, but for the wrong leaves.
-		memProof = mem.MerkleProof(arch.Word(memAddr1 + arch.WordSize))
-		insnProof = mem.MerkleProof(arch.Word(memAddr0 + arch.WordSize))
+		memProof = mem.MerkleProof(uint32(memAddr + 32))
+		insnProof = mem.MerkleProof(uint32(pc + 32))
 
 		output := struct {
 			MemRoot common.Hash

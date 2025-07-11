@@ -360,24 +360,18 @@ func TestNetworkNotifyAddPeerAndRemovePeer(t *testing.T) {
 		return nil
 	}, metrics.NoopMetrics, &NoopApplicationScorer{})
 
-	waitChan := make(chan struct{}, 2)
-	var connectedOnce sync.Once
-	var disconnectedOnce sync.Once
+	waitChan := make(chan struct{}, 1)
 	hostA.Network().Notify(&network.NotifyBundle{
 		ConnectedF: func(nw network.Network, conn network.Conn) {
-			connectedOnce.Do(func() {
-				syncCl.AddPeer(conn.RemotePeer())
-				waitChan <- struct{}{}
-			})
+			syncCl.AddPeer(conn.RemotePeer())
+			waitChan <- struct{}{}
 		},
 		DisconnectedF: func(nw network.Network, conn network.Conn) {
-			disconnectedOnce.Do(func() {
-				// only when no connection is available, we can remove the peer
-				if nw.Connectedness(conn.RemotePeer()) == network.NotConnected {
-					syncCl.RemovePeer(conn.RemotePeer())
-				}
-				waitChan <- struct{}{}
-			})
+			// only when no connection is available, we can remove the peer
+			if nw.Connectedness(conn.RemotePeer()) == network.NotConnected {
+				syncCl.RemovePeer(conn.RemotePeer())
+			}
+			waitChan <- struct{}{}
 		},
 	})
 	syncCl.Start()

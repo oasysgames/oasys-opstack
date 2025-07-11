@@ -37,7 +37,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_localToken",
+        "name": "superchainToken",
         "type": "address"
       }
     ],
@@ -45,7 +45,7 @@
     "outputs": [
       {
         "internalType": "address",
-        "name": "remoteToken_",
+        "name": "remoteToken",
         "type": "address"
       }
     ],

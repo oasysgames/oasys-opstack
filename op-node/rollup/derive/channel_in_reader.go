@@ -21,24 +21,14 @@ type ChannelInReader struct {
 	spec        *rollup.ChainSpec
 	cfg         *rollup.Config
 	nextBatchFn func() (*BatchData, error)
-	prev        RawChannelProvider
+	prev        *ChannelBank
 	metrics     Metrics
 }
 
-var (
-	_ ResettableStage = (*ChannelInReader)(nil)
-	_ ChannelFlusher  = (*ChannelInReader)(nil)
-)
-
-type RawChannelProvider interface {
-	ResettableStage
-	ChannelFlusher
-	Origin() eth.L1BlockRef
-	NextRawChannel(ctx context.Context) ([]byte, error)
-}
+var _ ResettableStage = (*ChannelInReader)(nil)
 
 // NewChannelInReader creates a ChannelInReader, which should be Reset(origin) before use.
-func NewChannelInReader(cfg *rollup.Config, log log.Logger, prev RawChannelProvider, metrics Metrics) *ChannelInReader {
+func NewChannelInReader(cfg *rollup.Config, log log.Logger, prev *ChannelBank, metrics Metrics) *ChannelInReader {
 	return &ChannelInReader{
 		spec:    rollup.NewChainSpec(cfg),
 		cfg:     cfg,
@@ -75,7 +65,7 @@ func (cr *ChannelInReader) NextChannel() {
 // It will return a temporary error if it needs to be called again to advance some internal state.
 func (cr *ChannelInReader) NextBatch(ctx context.Context) (Batch, error) {
 	if cr.nextBatchFn == nil {
-		if data, err := cr.prev.NextRawChannel(ctx); err == io.EOF {
+		if data, err := cr.prev.NextData(ctx); err == io.EOF {
 			return nil, io.EOF
 		} else if err != nil {
 			return nil, err
@@ -131,9 +121,4 @@ func (cr *ChannelInReader) NextBatch(ctx context.Context) (Batch, error) {
 func (cr *ChannelInReader) Reset(ctx context.Context, _ eth.L1BlockRef, _ eth.SystemConfig) error {
 	cr.nextBatchFn = nil
 	return io.EOF
-}
-
-func (cr *ChannelInReader) FlushChannel() {
-	cr.nextBatchFn = nil
-	cr.prev.FlushChannel()
 }

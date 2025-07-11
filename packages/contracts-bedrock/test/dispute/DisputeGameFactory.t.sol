@@ -24,6 +24,7 @@ contract DisputeGameFactory_Init is CommonTest {
     event InitBondUpdated(GameType indexed gameType, uint256 indexed newBond);
 
     function setUp() public virtual override {
+        super.enableFaultProofs();
         super.setUp();
         fakeClone = new FakeClone();
 

@@ -5,16 +5,16 @@ pragma solidity 0.8.15;
 import { Test } from "forge-std/Test.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { CommonTest } from "test/setup/CommonTest.sol";
+import { Bridge_Initializer } from "test/setup/Bridge_Initializer.sol";
 
 // Libraries
 import { Types } from "src/libraries/Types.sol";
 import { SafeCall } from "src/libraries/SafeCall.sol";
-import { IL1BlockInterop } from "src/L2/interfaces/IL1BlockInterop.sol";
+import { L1BlockInterop } from "src/L2/L1BlockInterop.sol";
 import { Encoding } from "src/libraries/Encoding.sol";
 
 // Interfaces
 import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMessenger.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
 // Free function for setting the prevBaseFee param in the OptimismPortal.
 function setPrevBaseFee(Vm _vm, address _op, uint128 _prevBaseFee) {
@@ -47,7 +47,6 @@ contract GasBenchMark_OptimismPortal is CommonTest {
 
     // Use a constructor to set the storage vars above, so as to minimize the number of ffi calls.
     constructor() {
-        super.enableLegacyContracts();
         super.setUp();
         _defaultTx = Types.WithdrawalTransaction({
             nonce: 0,
@@ -109,7 +108,7 @@ contract GasBenchMark_OptimismPortal is CommonTest {
     }
 }
 
-contract GasBenchMark_L1CrossDomainMessenger is CommonTest {
+contract GasBenchMark_L1CrossDomainMessenger is Bridge_Initializer {
     function test_sendMessage_benchmark_0() external {
         vm.pauseGasMetering();
         setPrevBaseFee(vm, address(optimismPortal), 1 gwei);
@@ -131,7 +130,7 @@ contract GasBenchMark_L1CrossDomainMessenger is CommonTest {
     }
 }
 
-contract GasBenchMark_L1StandardBridge_Deposit is CommonTest {
+contract GasBenchMark_L1StandardBridge_Deposit is Bridge_Initializer {
     function setUp() public virtual override {
         super.setUp();
         deal(address(L1Token), alice, 100000, true);
@@ -180,13 +179,13 @@ contract GasBenchMark_L1StandardBridge_Deposit is CommonTest {
     }
 }
 
-contract GasBenchMark_L1StandardBridge_Finalize is CommonTest {
+contract GasBenchMark_L1StandardBridge_Finalize is Bridge_Initializer {
     function setUp() public virtual override {
         super.setUp();
         deal(address(L1Token), address(l1StandardBridge), 100, true);
         vm.mockCall(
             address(l1StandardBridge.messenger()),
-            abi.encodeCall(ICrossDomainMessenger.xDomainMessageSender, ()),
+            abi.encodeWithSelector(ICrossDomainMessenger.xDomainMessageSender.selector),
             abi.encode(address(l1StandardBridge.OTHER_BRIDGE()))
         );
         vm.startPrank(address(l1StandardBridge.messenger()));
@@ -205,7 +204,6 @@ contract GasBenchMark_L2OutputOracle is CommonTest {
     uint256 nextBlockNumber;
 
     function setUp() public override {
-        super.enableLegacyContracts();
         super.setUp();
         nextBlockNumber = l2OutputOracle.nextBlockNumber();
         warpToProposeTime(nextBlockNumber);
@@ -257,16 +255,11 @@ contract GasBenchMark_L1Block_SetValuesEcotone_Warm is GasBenchMark_L1Block {
 }
 
 contract GasBenchMark_L1BlockInterop is GasBenchMark_L1Block {
-    IL1BlockInterop l1BlockInterop;
+    L1BlockInterop l1BlockInterop;
 
     function setUp() public virtual override {
         super.setUp();
-        l1BlockInterop = IL1BlockInterop(
-            DeployUtils.create1({
-                _name: "L1BlockInterop",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1BlockInterop.__constructor__, ()))
-            })
-        );
+        l1BlockInterop = new L1BlockInterop();
         setValuesCalldata = Encoding.encodeSetL1BlockValuesInterop(
             type(uint32).max,
             type(uint32).max,
@@ -301,7 +294,7 @@ contract GasBenchMark_L1BlockInterop_DepositsComplete is GasBenchMark_L1BlockInt
     function test_depositsComplete_benchmark() external {
         SafeCall.call({
             _target: address(l1BlockInterop),
-            _calldata: abi.encodeCall(IL1BlockInterop.depositsComplete, ())
+            _calldata: abi.encodeWithSelector(l1BlockInterop.depositsComplete.selector)
         });
     }
 }
@@ -316,7 +309,7 @@ contract GasBenchMark_L1BlockInterop_DepositsComplete_Warm is GasBenchMark_L1Blo
     function test_depositsComplete_benchmark() external {
         SafeCall.call({
             _target: address(l1BlockInterop),
-            _calldata: abi.encodeCall(l1BlockInterop.depositsComplete, ())
+            _calldata: abi.encodeWithSelector(l1BlockInterop.depositsComplete.selector)
         });
     }
 }

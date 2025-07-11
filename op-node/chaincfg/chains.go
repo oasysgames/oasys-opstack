@@ -2,7 +2,6 @@ package chaincfg
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/ethereum-optimism/superchain-registry/superchain"
@@ -37,7 +36,6 @@ func AvailableNetworks() []string {
 	for _, cfg := range superchain.OPChains {
 		networks = append(networks, cfg.Chain+"-"+cfg.Superchain)
 	}
-	sort.Strings(networks)
 	return networks
 }
 

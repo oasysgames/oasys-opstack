@@ -29,11 +29,13 @@ func TestBatcherMultiTx(t *testing.T) {
 	l1Client := sys.NodeClient("l1")
 	l2Seq := sys.NodeClient("sequencer")
 
-	_, err = geth.WaitForBlock(big.NewInt(10), l2Seq)
+	_, err = geth.WaitForBlock(big.NewInt(10), l2Seq, time.Duration(cfg.DeployConfig.L2BlockTime*15)*time.Second)
 	require.NoError(t, err, "Waiting for L2 blocks")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	l1Number, err := l1Client.BlockNumber(ctx)
+	require.NoError(t, err)
 
 	// start batch submission
 	driver := sys.BatchSubmitter.TestDriver()
@@ -41,33 +43,21 @@ func TestBatcherMultiTx(t *testing.T) {
 	require.NoError(t, err)
 
 	totalBatcherTxsCount := int64(0)
-
-	headNum, err := l1Client.BlockNumber(ctx)
-	require.NoError(t, err)
-	stopNum := headNum + 10
-	startBlock := uint64(1)
-
-	for {
-		for i := startBlock; i <= headNum; i++ {
-			block, err := l1Client.BlockByNumber(ctx, big.NewInt(int64(i)))
-			require.NoError(t, err)
-
-			batcherTxCount, err := transactions.TransactionsBySender(block, cfg.DeployConfig.BatchSenderAddress)
-			require.NoError(t, err)
-			totalBatcherTxsCount += batcherTxCount
-
-			if totalBatcherTxsCount >= 10 {
-				return
-			}
-		}
-
-		headNum++
-		if headNum > stopNum {
-			break
-		}
-		startBlock = headNum
-		_, err = geth.WaitForBlock(big.NewInt(int64(headNum)), l1Client)
+	// wait for up to 5 L1 blocks, usually only 3 is required, but it's
+	// possible additional L1 blocks will be created before the batcher starts,
+	// so we wait additional blocks.
+	for i := int64(0); i < 5; i++ {
+		block, err := geth.WaitForBlock(big.NewInt(int64(l1Number)+i), l1Client, time.Duration(cfg.DeployConfig.L1BlockTime*2)*time.Second)
+		require.NoError(t, err, "Waiting for l1 blocks")
+		// there are possibly other services (proposer/challenger) in the background sending txs
+		// so we only count the batcher txs
+		batcherTxCount, err := transactions.TransactionsBySender(block, cfg.DeployConfig.BatchSenderAddress)
 		require.NoError(t, err)
+		totalBatcherTxsCount += int64(batcherTxCount)
+
+		if totalBatcherTxsCount >= 10 {
+			return
+		}
 	}
 
 	t.Fatal("Expected at least 10 transactions from the batcher")

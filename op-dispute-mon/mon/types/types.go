@@ -18,7 +18,6 @@ type EnrichedClaim struct {
 
 type EnrichedGameData struct {
 	types.GameMetadata
-	LastUpdateTime        time.Time
 	L1Head                common.Hash
 	L1HeadNum             uint64
 	L2BlockNumber         uint64

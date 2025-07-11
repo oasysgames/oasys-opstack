@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
+	"github.com/ethereum-optimism/optimism/op-supervisor/supervisor/backend/db/entrydb"
 	"github.com/ethereum-optimism/optimism/op-supervisor/supervisor/types"
 )
 
@@ -26,9 +27,9 @@ func newSearchCheckpoint(blockNum uint64, logsSince uint32, timestamp uint64) se
 	}
 }
 
-func newSearchCheckpointFromEntry(data Entry) (searchCheckpoint, error) {
-	if data.Type() != TypeSearchCheckpoint {
-		return searchCheckpoint{}, fmt.Errorf("%w: attempting to decode search checkpoint but was type %s", types.ErrDataCorruption, data.Type())
+func newSearchCheckpointFromEntry(data entrydb.Entry) (searchCheckpoint, error) {
+	if data.Type() != entrydb.TypeSearchCheckpoint {
+		return searchCheckpoint{}, fmt.Errorf("%w: attempting to decode search checkpoint but was type %s", ErrDataCorruption, data.Type())
 	}
 	return searchCheckpoint{
 		blockNum:  binary.LittleEndian.Uint64(data[1:9]),
@@ -39,9 +40,9 @@ func newSearchCheckpointFromEntry(data Entry) (searchCheckpoint, error) {
 
 // encode creates a checkpoint entry
 // type 0: "search checkpoint" <type><uint64 block number: 8 bytes><uint32 logsSince count: 4 bytes><uint64 timestamp: 8 bytes> = 21 bytes
-func (s searchCheckpoint) encode() Entry {
-	var data Entry
-	data[0] = uint8(TypeSearchCheckpoint)
+func (s searchCheckpoint) encode() entrydb.Entry {
+	var data entrydb.Entry
+	data[0] = uint8(entrydb.TypeSearchCheckpoint)
 	binary.LittleEndian.PutUint64(data[1:9], s.blockNum)
 	binary.LittleEndian.PutUint32(data[9:13], s.logsSince)
 	binary.LittleEndian.PutUint64(data[13:21], s.timestamp)
@@ -56,16 +57,16 @@ func newCanonicalHash(hash common.Hash) canonicalHash {
 	return canonicalHash{hash: hash}
 }
 
-func newCanonicalHashFromEntry(data Entry) (canonicalHash, error) {
-	if data.Type() != TypeCanonicalHash {
-		return canonicalHash{}, fmt.Errorf("%w: attempting to decode canonical hash but was type %s", types.ErrDataCorruption, data.Type())
+func newCanonicalHashFromEntry(data entrydb.Entry) (canonicalHash, error) {
+	if data.Type() != entrydb.TypeCanonicalHash {
+		return canonicalHash{}, fmt.Errorf("%w: attempting to decode canonical hash but was type %s", ErrDataCorruption, data.Type())
 	}
 	return newCanonicalHash(common.Hash(data[1:33])), nil
 }
 
-func (c canonicalHash) encode() Entry {
-	var entry Entry
-	entry[0] = uint8(TypeCanonicalHash)
+func (c canonicalHash) encode() entrydb.Entry {
+	var entry entrydb.Entry
+	entry[0] = uint8(entrydb.TypeCanonicalHash)
 	copy(entry[1:33], c.hash[:])
 	return entry
 }
@@ -75,9 +76,9 @@ type initiatingEvent struct {
 	logHash    common.Hash
 }
 
-func newInitiatingEventFromEntry(data Entry) (initiatingEvent, error) {
-	if data.Type() != TypeInitiatingEvent {
-		return initiatingEvent{}, fmt.Errorf("%w: attempting to decode initiating event but was type %s", types.ErrDataCorruption, data.Type())
+func newInitiatingEventFromEntry(data entrydb.Entry) (initiatingEvent, error) {
+	if data.Type() != entrydb.TypeInitiatingEvent {
+		return initiatingEvent{}, fmt.Errorf("%w: attempting to decode initiating event but was type %s", ErrDataCorruption, data.Type())
 	}
 	flags := data[1]
 	return initiatingEvent{
@@ -95,9 +96,9 @@ func newInitiatingEvent(logHash common.Hash, hasExecMsg bool) initiatingEvent {
 
 // encode creates an initiating event entry
 // type 2: "initiating event" <type><flags><event-hash: 20 bytes> = 22 bytes
-func (i initiatingEvent) encode() Entry {
-	var data Entry
-	data[0] = uint8(TypeInitiatingEvent)
+func (i initiatingEvent) encode() entrydb.Entry {
+	var data entrydb.Entry
+	data[0] = uint8(entrydb.TypeInitiatingEvent)
 	flags := byte(0)
 	if i.hasExecMsg {
 		flags = flags | eventFlagHasExecutingMessage
@@ -108,7 +109,7 @@ func (i initiatingEvent) encode() Entry {
 }
 
 type executingLink struct {
-	chain     uint32 // chain index, not a chain ID
+	chain     uint32
 	blockNum  uint64
 	logIdx    uint32
 	timestamp uint64
@@ -119,16 +120,16 @@ func newExecutingLink(msg types.ExecutingMessage) (executingLink, error) {
 		return executingLink{}, fmt.Errorf("log idx is too large (%v)", msg.LogIdx)
 	}
 	return executingLink{
-		chain:     uint32(msg.Chain),
+		chain:     msg.Chain,
 		blockNum:  msg.BlockNum,
 		logIdx:    msg.LogIdx,
 		timestamp: msg.Timestamp,
 	}, nil
 }
 
-func newExecutingLinkFromEntry(data Entry) (executingLink, error) {
-	if data.Type() != TypeExecutingLink {
-		return executingLink{}, fmt.Errorf("%w: attempting to decode executing link but was type %s", types.ErrDataCorruption, data.Type())
+func newExecutingLinkFromEntry(data entrydb.Entry) (executingLink, error) {
+	if data.Type() != entrydb.TypeExecutingLink {
+		return executingLink{}, fmt.Errorf("%w: attempting to decode executing link but was type %s", ErrDataCorruption, data.Type())
 	}
 	timestamp := binary.LittleEndian.Uint64(data[16:24])
 	return executingLink{
@@ -141,9 +142,9 @@ func newExecutingLinkFromEntry(data Entry) (executingLink, error) {
 
 // encode creates an executing link entry
 // type 3: "executing link" <type><chain: 4 bytes><blocknum: 8 bytes><event index: 3 bytes><uint64 timestamp: 8 bytes> = 24 bytes
-func (e executingLink) encode() Entry {
-	var entry Entry
-	entry[0] = uint8(TypeExecutingLink)
+func (e executingLink) encode() entrydb.Entry {
+	var entry entrydb.Entry
+	entry[0] = uint8(entrydb.TypeExecutingLink)
 	binary.LittleEndian.PutUint32(entry[1:5], e.chain)
 	binary.LittleEndian.PutUint64(entry[5:13], e.blockNum)
 
@@ -163,18 +164,18 @@ func newExecutingCheck(hash common.Hash) executingCheck {
 	return executingCheck{hash: hash}
 }
 
-func newExecutingCheckFromEntry(data Entry) (executingCheck, error) {
-	if data.Type() != TypeExecutingCheck {
-		return executingCheck{}, fmt.Errorf("%w: attempting to decode executing check but was type %s", types.ErrDataCorruption, data.Type())
+func newExecutingCheckFromEntry(data entrydb.Entry) (executingCheck, error) {
+	if data.Type() != entrydb.TypeExecutingCheck {
+		return executingCheck{}, fmt.Errorf("%w: attempting to decode executing check but was type %s", ErrDataCorruption, data.Type())
 	}
 	return newExecutingCheck(common.Hash(data[1:33])), nil
 }
 
 // encode creates an executing check entry
 // type 4: "executing check" <type><event-hash: 32 bytes> = 33 bytes
-func (e executingCheck) encode() Entry {
-	var entry Entry
-	entry[0] = uint8(TypeExecutingCheck)
+func (e executingCheck) encode() entrydb.Entry {
+	var entry entrydb.Entry
+	entry[0] = uint8(entrydb.TypeExecutingCheck)
 	copy(entry[1:33], e.hash[:])
 	return entry
 }
@@ -183,8 +184,8 @@ type paddingEntry struct{}
 
 // encoding of the padding entry
 // type 5: "padding" <type><padding: 33 bytes> = 34 bytes
-func (e paddingEntry) encode() Entry {
-	var entry Entry
-	entry[0] = uint8(TypePadding)
+func (e paddingEntry) encode() entrydb.Entry {
+	var entry entrydb.Entry
+	entry[0] = uint8(entrydb.TypePadding)
 	return entry
 }

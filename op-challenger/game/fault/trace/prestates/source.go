@@ -7,9 +7,9 @@ import (
 )
 
 func NewPrestateSource(baseURL *url.URL, path string, localDir string, stateConverter vm.StateConverter) PrestateSource {
-	if path != "" {
-		return NewSinglePrestateSource(path)
-	} else {
+	if baseURL != nil {
 		return NewMultiPrestateProvider(baseURL, localDir, stateConverter)
+	} else {
+		return NewSinglePrestateSource(path)
 	}
 }

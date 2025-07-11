@@ -67,7 +67,6 @@ type jsonEncoder struct {
 func newJSONEncoder(w io.Writer) Encoder {
 	e := json.NewEncoder(w)
 	e.SetIndent("", "  ")
-	e.SetEscapeHTML(false)
 	return &jsonEncoder{
 		e: e,
 	}

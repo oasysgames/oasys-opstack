@@ -105,7 +105,7 @@ contract ETHLiquidity_Test is CommonTest {
         uint256 amount = STARTING_LIQUIDITY_BALANCE + 1;
 
         // Act
-        vm.expectRevert(); // nosemgrep: sol-safety-expectrevert-no-args
+        vm.expectRevert();
         ethLiquidity.mint(amount);
 
         // Assert

@@ -4,6 +4,7 @@ pragma solidity 0.8.15;
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
+import { Executables } from "scripts/libraries/Executables.sol";
 import { Process } from "scripts/libraries/Process.sol";
 import { Config, Fork, ForkUtils } from "scripts/libraries/Config.sol";
 
@@ -29,7 +30,6 @@ contract DeployConfig is Script {
     uint256 public l2GenesisEcotoneTimeOffset;
     uint256 public l2GenesisFjordTimeOffset;
     uint256 public l2GenesisGraniteTimeOffset;
-    uint256 public l2GenesisHoloceneTimeOffset;
     uint256 public maxSequencerDrift;
     uint256 public sequencerWindowSize;
     uint256 public channelTimeout;
@@ -109,7 +109,6 @@ contract DeployConfig is Script {
         l2GenesisEcotoneTimeOffset = _readOr(_json, "$.l2GenesisEcotoneTimeOffset", NULL_OFFSET);
         l2GenesisFjordTimeOffset = _readOr(_json, "$.l2GenesisFjordTimeOffset", NULL_OFFSET);
         l2GenesisGraniteTimeOffset = _readOr(_json, "$.l2GenesisGraniteTimeOffset", NULL_OFFSET);
-        l2GenesisHoloceneTimeOffset = _readOr(_json, "$.l2GenesisHoloceneTimeOffset", NULL_OFFSET);
 
         maxSequencerDrift = stdJson.readUint(_json, "$.maxSequencerDrift");
         sequencerWindowSize = stdJson.readUint(_json, "$.sequencerWindowSize");
@@ -210,9 +209,12 @@ contract DeployConfig is Script {
     function l2OutputOracleStartingTimestamp() public returns (uint256) {
         if (_l2OutputOracleStartingTimestamp < 0) {
             bytes32 tag = l1StartingBlockTag();
-            string memory cmd = string.concat("cast block ", vm.toString(tag), " --json | jq .timestamp");
-            string memory res = Process.bash(cmd);
-            return stdJson.readUint(res, "");
+            string[] memory cmd = new string[](3);
+            cmd[0] = Executables.bash;
+            cmd[1] = "-c";
+            cmd[2] = string.concat("cast block ", vm.toString(tag), " --json | ", Executables.jq, " .timestamp");
+            bytes memory res = Process.run(cmd);
+            return stdJson.readUint(string(res), "");
         }
         return uint256(_l2OutputOracleStartingTimestamp);
     }
@@ -244,9 +246,7 @@ contract DeployConfig is Script {
     }
 
     function latestGenesisFork() internal view returns (Fork) {
-        if (l2GenesisHoloceneTimeOffset == 0) {
-            return Fork.HOLOCENE;
-        } else if (l2GenesisGraniteTimeOffset == 0) {
+        if (l2GenesisGraniteTimeOffset == 0) {
             return Fork.GRANITE;
         } else if (l2GenesisFjordTimeOffset == 0) {
             return Fork.FJORD;
@@ -259,13 +259,16 @@ contract DeployConfig is Script {
     }
 
     function _getBlockByTag(string memory _tag) internal returns (bytes32) {
-        string memory cmd = string.concat("cast block ", _tag, " --json | jq -r .hash");
-        bytes memory res = bytes(Process.bash(cmd));
+        string[] memory cmd = new string[](3);
+        cmd[0] = Executables.bash;
+        cmd[1] = "-c";
+        cmd[2] = string.concat("cast block ", _tag, " --json | ", Executables.jq, " -r .hash");
+        bytes memory res = Process.run(cmd);
         return abi.decode(res, (bytes32));
     }
 
     function _readOr(string memory _jsonInp, string memory _key, bool _defaultValue) internal view returns (bool) {
-        return _jsonInp.readBoolOr(_key, _defaultValue);
+        return vm.keyExistsJson(_jsonInp, _key) ? _jsonInp.readBool(_key) : _defaultValue;
     }
 
     function _readOr(
@@ -289,7 +292,7 @@ contract DeployConfig is Script {
         view
         returns (address)
     {
-        return _jsonInp.readAddressOr(_key, _defaultValue);
+        return vm.keyExistsJson(_jsonInp, _key) ? _jsonInp.readAddress(_key) : _defaultValue;
     }
 
     function _isNull(string memory _jsonInp, string memory _key) internal pure returns (bool) {
@@ -306,6 +309,6 @@ contract DeployConfig is Script {
         view
         returns (string memory)
     {
-        return _jsonInp.readStringOr(_key, _defaultValue);
+        return vm.keyExists(_jsonInp, _key) ? _jsonInp.readString(_key) : _defaultValue;
     }
 }

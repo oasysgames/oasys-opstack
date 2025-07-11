@@ -4,12 +4,11 @@ pragma solidity 0.8.15;
 import { CommonTest } from "test/setup/CommonTest.sol";
 
 // Target contract dependencies
-import { IProxy } from "src/universal/interfaces/IProxy.sol";
+import { Proxy } from "src/universal/Proxy.sol";
 
 // Target contract
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
-
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
 contract SuperchainConfig_Init_Test is CommonTest {
     /// @dev Tests that initialization sets the correct values. These are defined in CommonTest.sol.
@@ -20,23 +19,13 @@ contract SuperchainConfig_Init_Test is CommonTest {
 
     /// @dev Tests that it can be intialized as paused.
     function test_initialize_paused_succeeds() external {
-        IProxy newProxy = IProxy(
-            DeployUtils.create1({
-                _name: "Proxy",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxy.__constructor__, (alice)))
-            })
-        );
-        ISuperchainConfig newImpl = ISuperchainConfig(
-            DeployUtils.create1({
-                _name: "SuperchainConfig",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(ISuperchainConfig.__constructor__, ()))
-            })
-        );
+        Proxy newProxy = new Proxy(alice);
+        ISuperchainConfig newImpl = ISuperchainConfig(address(new SuperchainConfig()));
 
         vm.startPrank(alice);
         newProxy.upgradeToAndCall(
             address(newImpl),
-            abi.encodeCall(ISuperchainConfig.initialize, (deploy.cfg().superchainConfigGuardian(), true))
+            abi.encodeWithSelector(ISuperchainConfig.initialize.selector, deploy.cfg().superchainConfigGuardian(), true)
         );
 
         assertTrue(ISuperchainConfig(address(newProxy)).paused());

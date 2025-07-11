@@ -19,21 +19,15 @@ const EnvVarPrefix = "OP_CONDUCTOR"
 var (
 	ConsensusAddr = &cli.StringFlag{
 		Name:    "consensus.addr",
-		Usage:   "Address (excluding port) to listen for consensus connections.",
+		Usage:   "Address to listen for consensus connections",
 		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "CONSENSUS_ADDR"),
 		Value:   "127.0.0.1",
 	}
 	ConsensusPort = &cli.IntFlag{
 		Name:    "consensus.port",
-		Usage:   "Port to listen for consensus connections. May be 0 to let the system select a port.",
+		Usage:   "Port to listen for consensus connections",
 		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "CONSENSUS_PORT"),
 		Value:   50050,
-	}
-	AdvertisedFullAddr = &cli.StringFlag{
-		Name:    "consensus.advertised",
-		Usage:   "Full address (host and port) for other peers to contact the consensus server. Optional: if left empty, the local address is advertised.",
-		EnvVars: opservice.PrefixEnvVar(EnvVarPrefix, "CONSENSUS_ADVERTISED"),
-		Value:   "",
 	}
 	RaftBootstrap = &cli.BoolFlag{
 		Name:    "raft.bootstrap",
@@ -133,7 +127,6 @@ var requiredFlags = []cli.Flag{
 }
 
 var optionalFlags = []cli.Flag{
-	AdvertisedFullAddr,
 	Paused,
 	RPCEnableProxy,
 	RaftBootstrap,

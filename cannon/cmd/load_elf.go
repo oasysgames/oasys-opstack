@@ -32,7 +32,7 @@ var (
 	LoadELFOutFlag = &cli.PathFlag{
 		Name:     "out",
 		Usage:    "Output path to write state to. State is dumped to stdout if set to '-'. Not written if empty. Use file extension '.bin', '.bin.gz', or '.json' for binary, compressed binary, or JSON formats.",
-		Value:    "state.bin.gz",
+		Value:    "state.json",
 		Required: false,
 	}
 	LoadELFMetaFlag = &cli.PathFlag{

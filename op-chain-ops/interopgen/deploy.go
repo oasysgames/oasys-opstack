@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/standard"
-
-	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/opcm"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
+	"github.com/ethereum-optimism/optimism/op-chain-ops/deployer/opcm"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/foundry"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis/beacondeposit"
@@ -132,7 +129,7 @@ func CreateL2(logger log.Logger, fa *foundry.ArtifactsFS, srcFS *foundry.SourceM
 	}
 	l2Host := script.NewHost(logger.New("role", "l2", "chain", l2Cfg.L2ChainID), fa, srcFS, l2Context)
 	l2Host.SetEnvVar("OUTPUT_MODE", "none") // we don't use the cheatcode, but capture the state outside of EVM execution
-	l2Host.SetEnvVar("FORK", "holocene")    // latest fork
+	l2Host.SetEnvVar("FORK", "granite")     // latest fork
 	return l2Host
 }
 
@@ -175,7 +172,7 @@ func DeploySuperchainToL1(l1Host *script.Host, superCfg *SuperchainConfig) (*Sup
 		ProtocolVersionsProxy:           superDeployment.ProtocolVersionsProxy,
 		OpcmProxyOwner:                  superDeployment.SuperchainProxyAdmin,
 		UseInterop:                      superCfg.Implementations.UseInterop,
-		StandardVersionsToml:            standard.VersionsMainnetData,
+		StandardVersionsToml:            opcm.StandardVersionsMainnetData,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to deploy Implementations contracts: %w", err)
@@ -200,7 +197,7 @@ func DeployL2ToL1(l1Host *script.Host, superCfg *SuperchainConfig, superDeployme
 
 	l1Host.SetTxOrigin(cfg.Deployer)
 
-	output, err := opcm.DeployOPChainV160(l1Host, opcm.DeployOPChainInputV160{
+	output, err := opcm.DeployOPChain(l1Host, opcm.DeployOPChainInput{
 		OpChainProxyAdminOwner:  cfg.ProxyAdminOwner,
 		SystemConfigOwner:       cfg.SystemConfigOwner,
 		Batcher:                 cfg.BatchSenderAddress,

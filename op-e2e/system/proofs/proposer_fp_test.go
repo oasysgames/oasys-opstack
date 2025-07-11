@@ -40,7 +40,7 @@ func TestL2OutputSubmitterFaultProofs(t *testing.T) {
 	require.Nil(t, err)
 
 	l2Verif := sys.NodeClient("verifier")
-	_, err = geth.WaitForBlock(big.NewInt(6), l2Verif)
+	_, err = geth.WaitForBlock(big.NewInt(6), l2Verif, 10*time.Duration(cfg.DeployConfig.L2BlockTime)*time.Second)
 	require.Nil(t, err)
 
 	timeoutCh := time.After(15 * time.Second)

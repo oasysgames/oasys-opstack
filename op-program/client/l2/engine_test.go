@@ -5,8 +5,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-program/client/l2/engineapi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -35,7 +33,7 @@ func TestPayloadByHash(t *testing.T) {
 		block := stub.head
 		payload, err := engine.PayloadByHash(ctx, block.Hash())
 		require.NoError(t, err)
-		expected, err := eth.BlockAsPayload(block, engine.backend.Config().ShanghaiTime)
+		expected, err := eth.BlockAsPayload(block, engine.rollupCfg.CanyonTime)
 		require.NoError(t, err)
 		require.Equal(t, &eth.ExecutionPayloadEnvelope{ExecutionPayload: expected}, payload)
 	})
@@ -57,7 +55,7 @@ func TestPayloadByNumber(t *testing.T) {
 		block := stub.head
 		payload, err := engine.PayloadByNumber(ctx, block.NumberU64())
 		require.NoError(t, err)
-		expected, err := eth.BlockAsPayload(block, engine.backend.Config().ShanghaiTime)
+		expected, err := eth.BlockAsPayload(block, engine.rollupCfg.CanyonTime)
 		require.NoError(t, err)
 		require.Equal(t, &eth.ExecutionPayloadEnvelope{ExecutionPayload: expected}, payload)
 	})
@@ -130,7 +128,7 @@ func TestSystemConfigByL2Hash(t *testing.T) {
 	engine, stub := createOracleEngine(t)
 
 	t.Run("KnownBlock", func(t *testing.T) {
-		payload, err := eth.BlockAsPayload(stub.safe, engine.backend.Config().ShanghaiTime)
+		payload, err := eth.BlockAsPayload(stub.safe, engine.rollupCfg.CanyonTime)
 		require.NoError(t, err)
 		expected, err := derive.PayloadToSystemConfig(engine.rollupCfg, payload)
 		require.NoError(t, err)
@@ -150,7 +148,6 @@ func createOracleEngine(t *testing.T) (*OracleEngine, *stubEngineBackend) {
 	head := createL2Block(t, 4)
 	safe := createL2Block(t, 3)
 	finalized := createL2Block(t, 2)
-	rollupCfg := chaincfg.OPSepolia()
 	backend := &stubEngineBackend{
 		head:      head,
 		safe:      safe,
@@ -165,11 +162,10 @@ func createOracleEngine(t *testing.T) (*OracleEngine, *stubEngineBackend) {
 			safe.NumberU64():      safe.Hash(),
 			finalized.NumberU64(): finalized.Hash(),
 		},
-		rollupCfg: rollupCfg,
 	}
 	engine := OracleEngine{
 		backend:   backend,
-		rollupCfg: rollupCfg,
+		rollupCfg: chaincfg.OPSepolia(),
 	}
 	return &engine, backend
 }
@@ -196,87 +192,80 @@ type stubEngineBackend struct {
 	finalized *types.Block
 	blocks    map[common.Hash]*types.Block
 	canonical map[uint64]common.Hash
-	rollupCfg *rollup.Config
 }
 
-func (s *stubEngineBackend) CurrentHeader() *types.Header {
+func (s stubEngineBackend) CurrentHeader() *types.Header {
 	return s.head.Header()
 }
 
-func (s *stubEngineBackend) CurrentSafeBlock() *types.Header {
+func (s stubEngineBackend) CurrentSafeBlock() *types.Header {
 	return s.safe.Header()
 }
 
-func (s *stubEngineBackend) CurrentFinalBlock() *types.Header {
+func (s stubEngineBackend) CurrentFinalBlock() *types.Header {
 	return s.finalized.Header()
 }
 
-func (s *stubEngineBackend) GetBlockByHash(hash common.Hash) *types.Block {
+func (s stubEngineBackend) GetBlockByHash(hash common.Hash) *types.Block {
 	return s.blocks[hash]
 }
 
-func (s *stubEngineBackend) GetCanonicalHash(n uint64) common.Hash {
+func (s stubEngineBackend) GetCanonicalHash(n uint64) common.Hash {
 	return s.canonical[n]
 }
 
-func (s *stubEngineBackend) GetBlock(hash common.Hash, number uint64) *types.Block {
+func (s stubEngineBackend) GetBlock(hash common.Hash, number uint64) *types.Block {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) HasBlockAndState(hash common.Hash, number uint64) bool {
+func (s stubEngineBackend) HasBlockAndState(hash common.Hash, number uint64) bool {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) GetVMConfig() *vm.Config {
+func (s stubEngineBackend) GetVMConfig() *vm.Config {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) Config() *params.ChainConfig {
-	return &params.ChainConfig{
-		ShanghaiTime: s.rollupCfg.CanyonTime,
-	}
-}
-
-func (s *stubEngineBackend) Engine() consensus.Engine {
+func (s stubEngineBackend) Config() *params.ChainConfig {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) StateAt(root common.Hash) (*state.StateDB, error) {
+func (s stubEngineBackend) Engine() consensus.Engine {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) InsertBlockWithoutSetHead(block *types.Block, makeWitness bool) (*stateless.Witness, error) {
+func (s stubEngineBackend) StateAt(root common.Hash) (*state.StateDB, error) {
 	panic("unsupported")
 }
 
-func (s stubEngineBackend) AssembleAndInsertBlockWithoutSetHead(_ *engineapi.BlockProcessor) (*types.Block, error) {
+func (s stubEngineBackend) InsertBlockWithoutSetHead(block *types.Block, makeWitness bool) (*stateless.Witness, error) {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) SetCanonical(head *types.Block) (common.Hash, error) {
+func (s stubEngineBackend) SetCanonical(head *types.Block) (common.Hash, error) {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) SetFinalized(header *types.Header) {
+func (s stubEngineBackend) SetFinalized(header *types.Header) {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) SetSafe(header *types.Header) {
+func (s stubEngineBackend) SetSafe(header *types.Header) {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) GetHeader(hash common.Hash, number uint64) *types.Header {
+func (s stubEngineBackend) GetHeader(hash common.Hash, number uint64) *types.Header {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) GetHeaderByNumber(number uint64) *types.Header {
+func (s stubEngineBackend) GetHeaderByNumber(number uint64) *types.Header {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) GetHeaderByHash(hash common.Hash) *types.Header {
+func (s stubEngineBackend) GetHeaderByHash(hash common.Hash) *types.Header {
 	panic("unsupported")
 }
 
-func (s *stubEngineBackend) GetTd(hash common.Hash, number uint64) *big.Int {
+func (s stubEngineBackend) GetTd(hash common.Hash, number uint64) *big.Int {
 	panic("unsupported")
 }

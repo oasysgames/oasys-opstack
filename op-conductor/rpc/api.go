@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum-optimism/optimism/op-conductor/consensus"
@@ -16,14 +15,10 @@ var ErrNotLeader = errors.New("refusing to proxy request to non-leader sequencer
 
 // API defines the interface for the op-conductor API.
 type API interface {
-	// OverrideLeader is used to override or clear override for the leader status.
+	// OverrideLeader is used to override the leader status, this is only used to return true for Leader() & LeaderWithID() calls.
 	// It does not impact the actual raft consensus leadership status. It is supposed to be used when the cluster is unhealthy
 	// and the node is the only one up, to allow batcher to be able to connect to the node, so that it could download blocks from the manually started sequencer.
-	// override: true => force current conductor to be treated as leader regardless of the actual leadership status in raft.
-	// override: false => clear the override, return the actual leadership status in raft.
-	OverrideLeader(ctx context.Context, override bool) error
-	// LeaderOverridden returns true if the leader status is overridden.
-	LeaderOverridden(ctx context.Context) (bool, error)
+	OverrideLeader(ctx context.Context) error
 	// Pause pauses op-conductor.
 	Pause(ctx context.Context) error
 	// Resume resumes op-conductor.
@@ -62,19 +57,13 @@ type API interface {
 	CommitUnsafePayload(ctx context.Context, payload *eth.ExecutionPayloadEnvelope) error
 }
 
-// ExecutionProxyAPI defines the methods proxied to the execution 'eth_' rpc backend
+// ExecutionProxyAPI defines the methods proxied to the execution rpc backend
 // This should include all methods that are called by op-batcher or op-proposer
 type ExecutionProxyAPI interface {
 	GetBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (map[string]interface{}, error)
 }
 
-// ExecutionMinerProxyAPI defines the methods proxied to the execution 'miner_' rpc backend
-// This should include all methods that are called by op-batcher or op-proposer
-type ExecutionMinerProxyAPI interface {
-	SetMaxDASize(ctx context.Context, maxTxSize hexutil.Big, maxBlockSize hexutil.Big) bool
-}
-
-// NodeProxyAPI defines the methods proxied to the node 'optimism_' rpc backend
+// NodeProxyAPI defines the methods proxied to the node rpc backend
 // This should include all methods that are called by op-batcher or op-proposer
 type NodeProxyAPI interface {
 	OutputAtBlock(ctx context.Context, blockNumString string) (*eth.OutputResponse, error)
@@ -82,7 +71,7 @@ type NodeProxyAPI interface {
 	RollupConfig(ctx context.Context) (*rollup.Config, error)
 }
 
-// NodeAdminProxyAPI defines the methods proxied to the node 'admin_' rpc backend
+// NodeProxyAPI defines the methods proxied to the node rpc backend
 // This should include all methods that are called by op-batcher or op-proposer
 type NodeAdminProxyAPI interface {
 	SequencerActive(ctx context.Context) (bool, error)

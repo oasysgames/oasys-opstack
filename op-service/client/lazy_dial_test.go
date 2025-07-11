@@ -28,7 +28,7 @@ func TestLazyRPC(t *testing.T) {
 
 	addr := listener.Addr().String()
 
-	cl := newLazyRPC("ws://"+addr, applyOptions(nil))
+	cl := NewLazyRPC("ws://" + addr)
 	defer cl.Close()
 
 	// At this point the connection is online, but the RPC is not.

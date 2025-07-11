@@ -8,7 +8,6 @@ import (
 	"time"
 
 	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
@@ -68,7 +67,7 @@ func TestBrotliBatcherFjord(t *testing.T) {
 	cfg.DeployConfig.L2GenesisFjordTimeOffset = &genesisActivation
 
 	// set up batcher to use brotli
-	sys, err := cfg.Start(t, e2esys.WithBatcherCompressionAlgo(derive.Brotli))
+	sys, err := cfg.Start(t, e2esys.StartOption{Key: "compressionAlgo", Role: "brotli", Action: nil})
 	require.Nil(t, err, "Error starting up system")
 
 	log := testlog.Logger(t, log.LevelInfo)

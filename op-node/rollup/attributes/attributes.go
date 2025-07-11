@@ -62,7 +62,6 @@ func (eq *AttributesHandler) OnEvent(ev event.Event) bool {
 		eq.onPendingSafeUpdate(x)
 	case derive.DerivedAttributesEvent:
 		eq.attributes = x.Attributes
-		eq.sentAttributes = false
 		eq.emitter.Emit(derive.ConfirmReceivedAttributesEvent{})
 		// to make sure we have a pre-state signal to process the attributes from
 		eq.emitter.Emit(engine.PendingSafeRequestEvent{})
@@ -72,7 +71,7 @@ func (eq *AttributesHandler) OnEvent(ev event.Event) bool {
 	case rollup.EngineTemporaryErrorEvent:
 		eq.sentAttributes = false
 	case engine.InvalidPayloadAttributesEvent:
-		if !x.Attributes.IsDerived() {
+		if x.Attributes.DerivedFrom == (eth.L1BlockRef{}) {
 			return true // from sequencing
 		}
 		eq.sentAttributes = false
@@ -194,7 +193,7 @@ func (eq *AttributesHandler) consolidateNextSafeAttributes(attributes *derive.At
 		}
 		eq.emitter.Emit(engine.PromotePendingSafeEvent{
 			Ref:         ref,
-			Concluding:  attributes.Concluding,
+			Safe:        attributes.IsLastInSpan,
 			DerivedFrom: attributes.DerivedFrom,
 		})
 	}

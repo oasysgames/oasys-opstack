@@ -10,7 +10,14 @@ import { Deployer } from "scripts/deploy/Deployer.sol";
 import { Config, OutputMode, OutputModeUtils, Fork, ForkUtils, LATEST_FORK } from "scripts/libraries/Config.sol";
 import { Process } from "scripts/libraries/Process.sol";
 import { SetPreinstalls } from "scripts/SetPreinstalls.s.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
+
+// Contracts
+import { SequencerFeeVault } from "src/L2/SequencerFeeVault.sol";
+import { BaseFeeVault } from "src/L2/BaseFeeVault.sol";
+import { L1FeeVault } from "src/L2/L1FeeVault.sol";
+import { OptimismSuperchainERC20Beacon } from "src/L2/OptimismSuperchainERC20Beacon.sol";
+import { OptimismMintableERC721Factory } from "src/universal/OptimismMintableERC721Factory.sol";
+import { GovernanceToken } from "src/governance/GovernanceToken.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
@@ -18,11 +25,6 @@ import { Preinstalls } from "src/libraries/Preinstalls.sol";
 import { Types } from "src/libraries/Types.sol";
 
 // Interfaces
-import { ISequencerFeeVault } from "src/L2/interfaces/ISequencerFeeVault.sol";
-import { IBaseFeeVault } from "src/L2/interfaces/IBaseFeeVault.sol";
-import { IL1FeeVault } from "src/L2/interfaces/IL1FeeVault.sol";
-import { IOptimismMintableERC721Factory } from "src/universal/interfaces/IOptimismMintableERC721Factory.sol";
-import { IGovernanceToken } from "src/governance/interfaces/IGovernanceToken.sol";
 import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimismMintableERC20Factory.sol";
 import { IL2StandardBridge } from "src/L2/interfaces/IL2StandardBridge.sol";
 import { IL2ERC721Bridge } from "src/L2/interfaces/IL2ERC721Bridge.sol";
@@ -31,6 +33,10 @@ import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMess
 import { IL2CrossDomainMessenger } from "src/L2/interfaces/IL2CrossDomainMessenger.sol";
 import { IGasPriceOracle } from "src/L2/interfaces/IGasPriceOracle.sol";
 import { IL1Block } from "src/L2/interfaces/IL1Block.sol";
+
+interface IInitializable {
+    function initialize(address _addr) external;
+}
 
 struct L1Dependencies {
     address payable l1CrossDomainMessengerProxy;
@@ -178,10 +184,6 @@ contract L2Genesis is Deployer {
         if (writeForkGenesisAllocs(_fork, Fork.GRANITE, _mode)) {
             return;
         }
-
-        if (writeForkGenesisAllocs(_fork, Fork.HOLOCENE, _mode)) {
-            return;
-        }
     }
 
     function writeForkGenesisAllocs(Fork _latest, Fork _current, OutputMode _mode) internal returns (bool isLatest_) {
@@ -276,7 +278,6 @@ contract L2Genesis is Deployer {
             setETHLiquidity(); // 25
             setOptimismSuperchainERC20Factory(); // 26
             setOptimismSuperchainERC20Beacon(); // 27
-            setSuperchainTokenBridge(); // 28
         }
     }
 
@@ -337,21 +338,11 @@ contract L2Genesis is Deployer {
 
     /// @notice This predeploy is following the safety invariant #2,
     function setSequencerFeeVault() public {
-        ISequencerFeeVault vault = ISequencerFeeVault(
-            DeployUtils.create1(
-                "SequencerFeeVault",
-                DeployUtils.encodeConstructor(
-                    abi.encodeCall(
-                        ISequencerFeeVault.__constructor__,
-                        (
-                            cfg.sequencerFeeVaultRecipient(),
-                            cfg.sequencerFeeVaultMinimumWithdrawalAmount(),
-                            Types.WithdrawalNetwork(cfg.sequencerFeeVaultWithdrawalNetwork())
-                        )
-                    )
-                )
-            )
-        );
+        SequencerFeeVault vault = new SequencerFeeVault({
+            _recipient: cfg.sequencerFeeVaultRecipient(),
+            _minWithdrawalAmount: cfg.sequencerFeeVaultMinimumWithdrawalAmount(),
+            _withdrawalNetwork: Types.WithdrawalNetwork(cfg.sequencerFeeVaultWithdrawalNetwork())
+        });
 
         address impl = Predeploys.predeployToCodeNamespace(Predeploys.SEQUENCER_FEE_WALLET);
         console.log("Setting %s implementation at: %s", "SequencerFeeVault", impl);
@@ -375,16 +366,8 @@ contract L2Genesis is Deployer {
 
     /// @notice This predeploy is following the safety invariant #2,
     function setOptimismMintableERC721Factory() public {
-        IOptimismMintableERC721Factory factory = IOptimismMintableERC721Factory(
-            DeployUtils.create1(
-                "OptimismMintableERC721Factory",
-                DeployUtils.encodeConstructor(
-                    abi.encodeCall(
-                        IOptimismMintableERC721Factory.__constructor__, (Predeploys.L2_ERC721_BRIDGE, cfg.l1ChainID())
-                    )
-                )
-            )
-        );
+        OptimismMintableERC721Factory factory =
+            new OptimismMintableERC721Factory({ _bridge: Predeploys.L2_ERC721_BRIDGE, _remoteChainId: cfg.l1ChainID() });
 
         address impl = Predeploys.predeployToCodeNamespace(Predeploys.OPTIMISM_MINTABLE_ERC721_FACTORY);
         console.log("Setting %s implementation at: %s", "OptimismMintableERC721Factory", impl);
@@ -439,21 +422,11 @@ contract L2Genesis is Deployer {
 
     /// @notice This predeploy is following the safety invariant #2.
     function setBaseFeeVault() public {
-        IBaseFeeVault vault = IBaseFeeVault(
-            DeployUtils.create1(
-                "BaseFeeVault",
-                DeployUtils.encodeConstructor(
-                    abi.encodeCall(
-                        IBaseFeeVault.__constructor__,
-                        (
-                            cfg.baseFeeVaultRecipient(),
-                            cfg.baseFeeVaultMinimumWithdrawalAmount(),
-                            Types.WithdrawalNetwork(cfg.baseFeeVaultWithdrawalNetwork())
-                        )
-                    )
-                )
-            )
-        );
+        BaseFeeVault vault = new BaseFeeVault({
+            _recipient: cfg.baseFeeVaultRecipient(),
+            _minWithdrawalAmount: cfg.baseFeeVaultMinimumWithdrawalAmount(),
+            _withdrawalNetwork: Types.WithdrawalNetwork(cfg.baseFeeVaultWithdrawalNetwork())
+        });
 
         address impl = Predeploys.predeployToCodeNamespace(Predeploys.BASE_FEE_VAULT);
         console.log("Setting %s implementation at: %s", "BaseFeeVault", impl);
@@ -466,21 +439,11 @@ contract L2Genesis is Deployer {
 
     /// @notice This predeploy is following the safety invariant #2.
     function setL1FeeVault() public {
-        IL1FeeVault vault = IL1FeeVault(
-            DeployUtils.create1(
-                "L1FeeVault",
-                DeployUtils.encodeConstructor(
-                    abi.encodeCall(
-                        IL1FeeVault.__constructor__,
-                        (
-                            cfg.l1FeeVaultRecipient(),
-                            cfg.l1FeeVaultMinimumWithdrawalAmount(),
-                            Types.WithdrawalNetwork(cfg.l1FeeVaultWithdrawalNetwork())
-                        )
-                    )
-                )
-            )
-        );
+        L1FeeVault vault = new L1FeeVault({
+            _recipient: cfg.l1FeeVaultRecipient(),
+            _minWithdrawalAmount: cfg.l1FeeVaultMinimumWithdrawalAmount(),
+            _withdrawalNetwork: Types.WithdrawalNetwork(cfg.l1FeeVaultWithdrawalNetwork())
+        });
 
         address impl = Predeploys.predeployToCodeNamespace(Predeploys.L1_FEE_VAULT);
         console.log("Setting %s implementation at: %s", "L1FeeVault", impl);
@@ -498,11 +461,7 @@ contract L2Genesis is Deployer {
             return;
         }
 
-        IGovernanceToken token = IGovernanceToken(
-            DeployUtils.create1(
-                "GovernanceToken", DeployUtils.encodeConstructor(abi.encodeCall(IGovernanceToken.__constructor__, ()))
-            )
-        );
+        GovernanceToken token = new GovernanceToken();
         console.log("Setting %s implementation at: %s", "GovernanceToken", Predeploys.GOVERNANCE_TOKEN);
         vm.etch(Predeploys.GOVERNANCE_TOKEN, address(token).code);
 
@@ -576,20 +535,21 @@ contract L2Genesis is Deployer {
         _setImplementationCode(Predeploys.OPTIMISM_SUPERCHAIN_ERC20_FACTORY);
     }
 
-    /// @notice This predeploy is following the safety invariant #1.
-    ///         This contract has no initializer.
+    /// @notice This predeploy is following the safety invariant #2.
     function setOptimismSuperchainERC20Beacon() internal {
         address superchainERC20Impl = Predeploys.OPTIMISM_SUPERCHAIN_ERC20;
         console.log("Setting %s implementation at: %s", "OptimismSuperchainERC20", superchainERC20Impl);
         vm.etch(superchainERC20Impl, vm.getDeployedCode("OptimismSuperchainERC20.sol:OptimismSuperchainERC20"));
 
-        _setImplementationCode(Predeploys.OPTIMISM_SUPERCHAIN_ERC20_BEACON);
-    }
+        OptimismSuperchainERC20Beacon beacon = new OptimismSuperchainERC20Beacon(superchainERC20Impl);
+        address beaconImpl = Predeploys.predeployToCodeNamespace(Predeploys.OPTIMISM_SUPERCHAIN_ERC20_BEACON);
 
-    /// @notice This predeploy is following the safety invariant #1.
-    ///         This contract has no initializer.
-    function setSuperchainTokenBridge() internal {
-        _setImplementationCode(Predeploys.SUPERCHAIN_TOKEN_BRIDGE);
+        console.log("Setting %s implementation at: %s", "OptimismSuperchainERC20Beacon", beaconImpl);
+        vm.etch(beaconImpl, address(beacon).code);
+
+        /// Reset so its not included state dump
+        vm.etch(address(beacon), "");
+        vm.resetNonce(address(beacon));
     }
 
     /// @notice Sets all the preinstalls.
@@ -642,7 +602,11 @@ contract L2Genesis is Deployer {
 
     /// @notice Sorts the allocs by address
     function sortJsonByKeys(string memory _path) internal {
-        Process.bash(string.concat("cat <<< $(jq -S '.' ", _path, ") > ", _path));
+        string[] memory commands = new string[](3);
+        commands[0] = "bash";
+        commands[1] = "-c";
+        commands[2] = string.concat("cat <<< $(jq -S '.' ", _path, ") > ", _path);
+        Process.run(commands);
     }
 
     /// @notice Funds the default dev accounts with ether

@@ -252,7 +252,9 @@ func testOutputCannonDefendStep(t *testing.T, allocType config.AllocType) {
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
+	game.WaitForInactivity(ctx, 10, true)
+	game.LogGameData(ctx)
+	require.EqualValues(t, gameTypes.GameStatusChallengerWon, game.Status(ctx))
 }
 
 func TestOutputCannonStepWithLargePreimage_Standard(t *testing.T) {
@@ -500,7 +502,9 @@ func testOutputCannonProposedOutputRootValid(t *testing.T, allocType config.Allo
 			sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 			require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-			game.WaitForGameStatus(ctx, gameTypes.GameStatusDefenderWon)
+			game.WaitForInactivity(ctx, 10, true)
+			game.LogGameData(ctx)
+			require.EqualValues(t, gameTypes.GameStatusDefenderWon, game.Status(ctx))
 		})
 	}
 }
@@ -999,7 +1003,9 @@ func testOutputCannonHonestSafeTraceExtensionValidRoot(t *testing.T, allocType c
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-	game.WaitForGameStatus(ctx, gameTypes.GameStatusDefenderWon)
+	game.WaitForInactivity(ctx, 10, true)
+	game.LogGameData(ctx)
+	require.EqualValues(t, gameTypes.GameStatusDefenderWon, game.Status(ctx))
 }
 
 func TestOutputCannonHonestSafeTraceExtension_InvalidRoot_Standard(t *testing.T) {
@@ -1046,7 +1052,9 @@ func testOutputCannonHonestSafeTraceExtensionInvalidRoot(t *testing.T, allocType
 	sys.TimeTravelClock.AdvanceTime(game.MaxClockDuration(ctx))
 	require.NoError(t, wait.ForNextBlock(ctx, l1Client))
 
-	game.WaitForGameStatus(ctx, gameTypes.GameStatusChallengerWon)
+	game.WaitForInactivity(ctx, 10, true)
+	game.LogGameData(ctx)
+	require.EqualValues(t, gameTypes.GameStatusChallengerWon, game.Status(ctx))
 }
 
 func TestAgreeFirstBlockWithOriginOf1_Standard(t *testing.T) {

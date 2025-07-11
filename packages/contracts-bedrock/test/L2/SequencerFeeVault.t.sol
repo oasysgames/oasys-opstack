@@ -7,13 +7,13 @@ import { Reverter } from "test/mocks/Callers.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 
 // Contracts
-import { ISequencerFeeVault } from "src/L2/interfaces/ISequencerFeeVault.sol";
+import { SequencerFeeVault } from "src/L2/SequencerFeeVault.sol";
 
 // Libraries
 import { Hashing } from "src/libraries/Hashing.sol";
 import { Types } from "src/libraries/Types.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
+import { Types as ITypes } from "src/L2/interfaces/ISequencerFeeVault.sol";
 
 contract SequencerFeeVault_Test is CommonTest {
     address recipient;
@@ -31,8 +31,12 @@ contract SequencerFeeVault_Test is CommonTest {
         assertEq(sequencerFeeVault.recipient(), recipient);
         assertEq(sequencerFeeVault.MIN_WITHDRAWAL_AMOUNT(), deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount());
         assertEq(sequencerFeeVault.minWithdrawalAmount(), deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount());
-        assertEq(uint8(sequencerFeeVault.WITHDRAWAL_NETWORK()), uint8(Types.WithdrawalNetwork.L1));
-        assertEq(uint8(sequencerFeeVault.withdrawalNetwork()), uint8(Types.WithdrawalNetwork.L1));
+        assertEq(
+            ITypes.WithdrawalNetwork.unwrap(sequencerFeeVault.WITHDRAWAL_NETWORK()), uint8(Types.WithdrawalNetwork.L1)
+        );
+        assertEq(
+            ITypes.WithdrawalNetwork.unwrap(sequencerFeeVault.withdrawalNetwork()), uint8(Types.WithdrawalNetwork.L1)
+        );
     }
 
     /// @dev Tests that the fee vault is able to receive ETH.
@@ -113,19 +117,11 @@ contract SequencerFeeVault_L2Withdrawal_Test is CommonTest {
         vm.etch(
             EIP1967Helper.getImplementation(Predeploys.SEQUENCER_FEE_WALLET),
             address(
-                DeployUtils.create1({
-                    _name: "SequencerFeeVault",
-                    _args: DeployUtils.encodeConstructor(
-                        abi.encodeCall(
-                            ISequencerFeeVault.__constructor__,
-                            (
-                                deploy.cfg().sequencerFeeVaultRecipient(),
-                                deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount(),
-                                Types.WithdrawalNetwork.L2
-                            )
-                        )
-                    )
-                })
+                new SequencerFeeVault(
+                    deploy.cfg().sequencerFeeVaultRecipient(),
+                    deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount(),
+                    Types.WithdrawalNetwork.L2
+                )
             ).code
         );
 

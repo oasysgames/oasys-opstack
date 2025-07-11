@@ -1,7 +1,5 @@
 package eth
 
-import "github.com/ethereum/go-ethereum/common/hexutil"
-
 type BlobSidecar struct {
 	Blob          Blob         `json:"blob"`
 	Index         Uint64String `json:"index"`
@@ -15,7 +13,8 @@ type APIBlobSidecar struct {
 	KZGCommitment     Bytes48                 `json:"kzg_commitment"`
 	KZGProof          Bytes48                 `json:"kzg_proof"`
 	SignedBlockHeader SignedBeaconBlockHeader `json:"signed_block_header"`
-	InclusionProof    []Bytes32               `json:"kzg_commitment_inclusion_proof"`
+	// The inclusion-proof of the blob-sidecar into the beacon-block is ignored,
+	// since we verify blobs by their versioned hashes against the execution-layer block instead.
 }
 
 func (sc *APIBlobSidecar) BlobSidecar() *BlobSidecar {
@@ -28,8 +27,8 @@ func (sc *APIBlobSidecar) BlobSidecar() *BlobSidecar {
 }
 
 type SignedBeaconBlockHeader struct {
-	Message   BeaconBlockHeader `json:"message"`
-	Signature hexutil.Bytes     `json:"signature"`
+	Message BeaconBlockHeader `json:"message"`
+	// signature is ignored, since we verify blobs against EL versioned-hashes
 }
 
 type BeaconBlockHeader struct {

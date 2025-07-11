@@ -84,7 +84,7 @@ contract ConfigurableCaller {
 /// @dev Any call will revert
 contract Reverter {
     function doRevert() public pure {
-        revert("Reverter: Reverter reverted");
+        revert("Reverter reverted");
     }
 
     fallback() external {

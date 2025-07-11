@@ -46,8 +46,7 @@ func decodeID(data []byte) eth.BlockID {
 }
 
 func (m *FakeAttributesBuilder) PreparePayloadAttributes(ctx context.Context,
-	l2Parent eth.L2BlockRef, epoch eth.BlockID,
-) (attrs *eth.PayloadAttributes, err error) {
+	l2Parent eth.L2BlockRef, epoch eth.BlockID) (attrs *eth.PayloadAttributes, err error) {
 	gasLimit := eth.Uint64Quantity(30_000_000)
 	attrs = &eth.PayloadAttributes{
 		Timestamp:             eth.Uint64Quantity(l2Parent.Time + m.cfg.BlockTime),
@@ -316,7 +315,7 @@ func TestSequencer_StaleBuild(t *testing.T) {
 		Info:         payloadInfo,
 		BuildStarted: startedTime,
 		Parent:       head,
-		Concluding:   false,
+		IsLastInSpan: false,
 		DerivedFrom:  eth.L1BlockRef{},
 	})
 
@@ -326,7 +325,7 @@ func TestSequencer_StaleBuild(t *testing.T) {
 	emitter.ExpectOnce(engine.BuildSealEvent{
 		Info:         payloadInfo,
 		BuildStarted: startedTime,
-		Concluding:   false,
+		IsLastInSpan: false,
 		DerivedFrom:  eth.L1BlockRef{},
 	})
 	seq.OnEvent(SequencerActionEvent{})
@@ -356,18 +355,18 @@ func TestSequencer_StaleBuild(t *testing.T) {
 		SequenceNumber: 0,
 	}
 	emitter.ExpectOnce(engine.PayloadProcessEvent{
-		Concluding:  false,
-		DerivedFrom: eth.L1BlockRef{},
-		Envelope:    payloadEnvelope,
-		Ref:         payloadRef,
+		IsLastInSpan: false,
+		DerivedFrom:  eth.L1BlockRef{},
+		Envelope:     payloadEnvelope,
+		Ref:          payloadRef,
 	})
 	// And report back the sealing result to the engine
 	seq.OnEvent(engine.BuildSealedEvent{
-		Concluding:  false,
-		DerivedFrom: eth.L1BlockRef{},
-		Info:        payloadInfo,
-		Envelope:    payloadEnvelope,
-		Ref:         payloadRef,
+		IsLastInSpan: false,
+		DerivedFrom:  eth.L1BlockRef{},
+		Info:         payloadInfo,
+		Envelope:     payloadEnvelope,
+		Ref:          payloadRef,
 	})
 	// The sequencer should start processing the payload
 	emitter.AssertExpectations(t)
@@ -522,7 +521,7 @@ func TestSequencerBuild(t *testing.T) {
 		Info:         payloadInfo,
 		BuildStarted: startedTime,
 		Parent:       head,
-		Concluding:   false,
+		IsLastInSpan: false,
 		DerivedFrom:  eth.L1BlockRef{},
 	})
 	// The sealing should now be scheduled as next action.
@@ -536,7 +535,7 @@ func TestSequencerBuild(t *testing.T) {
 	emitter.ExpectOnce(engine.BuildSealEvent{
 		Info:         payloadInfo,
 		BuildStarted: startedTime,
-		Concluding:   false,
+		IsLastInSpan: false,
 		DerivedFrom:  eth.L1BlockRef{},
 	})
 	seq.OnEvent(SequencerActionEvent{})
@@ -565,18 +564,18 @@ func TestSequencerBuild(t *testing.T) {
 		SequenceNumber: 0,
 	}
 	emitter.ExpectOnce(engine.PayloadProcessEvent{
-		Concluding:  false,
-		DerivedFrom: eth.L1BlockRef{},
-		Envelope:    payloadEnvelope,
-		Ref:         payloadRef,
+		IsLastInSpan: false,
+		DerivedFrom:  eth.L1BlockRef{},
+		Envelope:     payloadEnvelope,
+		Ref:          payloadRef,
 	})
 	// And report back the sealing result to the engine
 	seq.OnEvent(engine.BuildSealedEvent{
-		Concluding:  false,
-		DerivedFrom: eth.L1BlockRef{},
-		Info:        payloadInfo,
-		Envelope:    payloadEnvelope,
-		Ref:         payloadRef,
+		IsLastInSpan: false,
+		DerivedFrom:  eth.L1BlockRef{},
+		Info:         payloadInfo,
+		Envelope:     payloadEnvelope,
+		Ref:          payloadRef,
 	})
 	// The sequencer should start processing the payload
 	emitter.AssertExpectations(t)
@@ -588,10 +587,10 @@ func TestSequencerBuild(t *testing.T) {
 
 	// Mock that the processing was successful
 	seq.OnEvent(engine.PayloadSuccessEvent{
-		Concluding:  false,
-		DerivedFrom: eth.L1BlockRef{},
-		Envelope:    payloadEnvelope,
-		Ref:         payloadRef,
+		IsLastInSpan: false,
+		DerivedFrom:  eth.L1BlockRef{},
+		Envelope:     payloadEnvelope,
+		Ref:          payloadRef,
 	})
 	require.Nil(t, deps.asyncGossip.payload, "async gossip should have cleared,"+
 		" after previous publishing and now having persisted the block ourselves")
@@ -644,8 +643,6 @@ func createSequencer(log log.Logger) (*Sequencer, *sequencerTestDeps) {
 		DeltaTime:         new(uint64),
 		EcotoneTime:       new(uint64),
 		FjordTime:         new(uint64),
-		GraniteTime:       new(uint64),
-		HoloceneTime:      new(uint64),
 	}
 	deps := &sequencerTestDeps{
 		cfg:           cfg,

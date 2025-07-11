@@ -7,9 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
 
+	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
+
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -18,13 +22,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
-
-	op_e2e "github.com/ethereum-optimism/optimism/op-e2e"
-	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
-	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
-	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -52,9 +51,8 @@ func TestMissingGasLimit(t *testing.T) {
 
 	res, err := opGeth.StartBlockBuilding(ctx, attrs)
 	require.Error(t, err)
-	var rpcErr rpc.Error
-	require.ErrorAs(t, err, &rpcErr)
-	require.EqualValues(t, eth.InvalidPayloadAttributes, rpcErr.ErrorCode())
+	require.ErrorIs(t, err, eth.InputError{})
+	require.Equal(t, eth.InvalidPayloadAttributes, err.(eth.InputError).Code)
 	require.Nil(t, res)
 }
 
