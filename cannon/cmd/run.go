@@ -6,10 +6,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/pkg/profile"
+	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
@@ -20,11 +27,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/serialize"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/pkg/profile"
-	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -75,7 +77,7 @@ var (
 	}
 	RunStopAtPreimageFlag = &cli.StringFlag{
 		Name:     "stop-at-preimage",
-		Usage:    "stop at the first preimage request matching this key",
+		Usage:    "stop at the first preimage request matching this key. Format: <key-prefix>@<offset>@<step>",
 		Required: false,
 	}
 	RunStopAtPreimageTypeFlag = &cli.StringFlag{
@@ -83,7 +85,7 @@ var (
 		Usage:    "stop at the first preimage request matching this type",
 		Required: false,
 	}
-	RunStopAtPreimageLargerThanFlag = &cli.StringFlag{
+	RunStopAtPreimageLargerThanFlag = &cli.IntFlag{
 		Name:     "stop-at-preimage-larger-than",
 		Usage:    "stop at the first step that requests a preimage larger than the specified size (in bytes)",
 		Required: false,
@@ -261,8 +263,20 @@ func (p *ProcessPreimageOracle) wait() {
 type StepFn func(proof bool) (*mipsevm.StepWitness, error)
 
 func Guard(proc *os.ProcessState, fn StepFn) StepFn {
-	return func(proof bool) (*mipsevm.StepWitness, error) {
-		wit, err := fn(proof)
+	return func(proof bool) (wit *mipsevm.StepWitness, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				if proc.Exited() {
+					err = fmt.Errorf("pre-image server exited with code %d, resulting in panic %s", proc.ExitCode(), string(buf))
+				} else {
+					err = fmt.Errorf("pre-image server resulted in panic %s", string(buf))
+				}
+			}
+		}()
+		wit, err = fn(proof)
 		if err != nil {
 			if proc.Exited() {
 				return nil, fmt.Errorf("pre-image server exited with code %d, resulting in err %w", proc.ExitCode(), err)
@@ -293,19 +307,27 @@ func Run(ctx *cli.Context) error {
 	stopAtAnyPreimage := false
 	var stopAtPreimageKeyPrefix []byte
 	stopAtPreimageOffset := arch.Word(0)
+	stopAtPreimageStep := uint64(0)
 	if ctx.IsSet(RunStopAtPreimageFlag.Name) {
 		val := ctx.String(RunStopAtPreimageFlag.Name)
 		parts := strings.Split(val, "@")
-		if len(parts) > 2 {
+		if len(parts) > 3 {
 			return fmt.Errorf("invalid %v: %v", RunStopAtPreimageFlag.Name, val)
 		}
 		stopAtPreimageKeyPrefix = common.FromHex(parts[0])
-		if len(parts) == 2 {
+		if len(parts) >= 2 {
 			x, err := strconv.ParseUint(parts[1], 10, arch.WordSize)
 			if err != nil {
 				return fmt.Errorf("invalid preimage offset: %w", err)
 			}
 			stopAtPreimageOffset = arch.Word(x)
+		}
+		if len(parts) == 3 {
+			x, err := strconv.ParseUint(parts[2], 10, arch.WordSize)
+			if err != nil {
+				return fmt.Errorf("invalid preimage offset: %w", err)
+			}
+			stopAtPreimageStep = x
 		}
 	} else {
 		switch ctx.String(RunStopAtPreimageTypeFlag.Name) {
@@ -379,6 +401,8 @@ func Run(ctx *cli.Context) error {
 	}
 	l.Info("Loaded input state", "version", state.Version)
 	vm := state.CreateVM(l, po, outLog, errLog, meta)
+
+	// Enable debug/stats tracking as requested
 	debugProgram := ctx.Bool(RunDebugFlag.Name)
 	if debugProgram {
 		if metaPath := ctx.Path(RunMetaFlag.Name); metaPath == "" {
@@ -387,6 +411,9 @@ func Run(ctx *cli.Context) error {
 		if err := vm.InitDebug(); err != nil {
 			return fmt.Errorf("failed to initialize debug mode: %w", err)
 		}
+	}
+	if debugInfoFile := ctx.Path(RunDebugInfoFlag.Name); debugInfoFile != "" {
+		vm.EnableStats()
 	}
 
 	proofFmt := ctx.String(RunProofFmtFlag.Name)
@@ -476,8 +503,8 @@ func Run(ctx *cli.Context) error {
 			}
 			if len(stopAtPreimageKeyPrefix) > 0 &&
 				slices.Equal(lastPreimageKey[:len(stopAtPreimageKeyPrefix)], stopAtPreimageKeyPrefix) {
-				if stopAtPreimageOffset == lastPreimageOffset {
-					l.Info("Stopping at preimage read", "keyPrefix", common.Bytes2Hex(stopAtPreimageKeyPrefix), "offset", lastPreimageOffset)
+				if stopAtPreimageOffset == lastPreimageOffset && step >= stopAtPreimageStep {
+					l.Info("Stopping at preimage read", "keyPrefix", common.Bytes2Hex(stopAtPreimageKeyPrefix), "offset", lastPreimageOffset, "step", step)
 					break
 				}
 			}

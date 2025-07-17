@@ -9,10 +9,34 @@
 # It will default to the target platform.
 ARG TARGET_BASE_IMAGE=debian:11.11-slim
 
+# The ubuntu target base image is used for the op-challenger build with kona and asterisc.
+ARG UBUNTU_TARGET_BASE_IMAGE=ubuntu:22.04
+
+# The version of kona to use.
+# The only build that uses this is `op-challenger-target`.
+ARG KONA_VERSION=none
+
+# The version of asterisc to use.
+# The only build that uses this is `op-challenger-target`.
+ARG ASTERISC_VERSION=none
+
 # We may be cross-building for another platform. Specify which platform we need as builder.
 FROM --platform=$BUILDPLATFORM golang:1.22.7-bullseye AS builder
 
 RUN apt update && apt install -y git jq bash ca-certificates
+
+# Install mise (the apk version is outdated)
+RUN curl https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+
+ARG TARGETARCH
+
+# Install yq
+RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_$TARGETARCH -O /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq
+
+# Install versioned toolchain
+COPY ./mise.toml .
+RUN mise trust && mise install -v -y just && cp $(mise which just) /usr/local/bin/just && just --version
 
 # We copy the go.mod/sum first, so the `go mod download` does not have to re-run if dependencies do not change.
 COPY ./go.mod /app/go.mod
@@ -37,7 +61,6 @@ ARG GIT_COMMIT
 ARG GIT_DATE
 
 ARG TARGETOS
-ARG TARGETARCH
 
 # separate docker-builds:
 # - proxyd
@@ -47,11 +70,18 @@ ARG TARGETARCH
 # The "id" defaults to the value of "target", the cache will thus be reused during this build.
 # "sharing" defaults to "shared", the cache will thus be available to other concurrent docker builds.
 
-FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/oplabs-tools-artifacts/images/cannon:v1.0.0 AS cannon-builder-0
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/oplabs-tools-artifacts/images/cannon:v1.0.0 AS cannon-builder-v1-0-0
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/oplabs-tools-artifacts/images/cannon:v1.2.0 AS cannon-builder-v1-2-0
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/oplabs-tools-artifacts/images/cannon:v1.3.0 AS cannon-builder-v1-3-0
 
 FROM --platform=$BUILDPLATFORM builder AS cannon-builder
 ARG CANNON_VERSION=v0.0.0
-COPY --from=cannon-builder-0 /usr/local/bin/cannon ./cannon/multicannon/embeds/cannon-0
+# Copy cannon binaries from previous versions
+COPY --from=cannon-builder-v1-0-0 /usr/local/bin/cannon ./cannon/multicannon/embeds/cannon-0
+COPY --from=cannon-builder-v1-2-0 /usr/local/bin/cannon-3 ./cannon/multicannon/embeds/cannon-3
+COPY --from=cannon-builder-v1-3-0 /usr/local/bin/cannon-1 ./cannon/multicannon/embeds/cannon-1
+COPY --from=cannon-builder-v1-3-0 /usr/local/bin/cannon-4 ./cannon/multicannon/embeds/cannon-4
+# Build current binaries
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd cannon && make cannon  \
   GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$CANNON_VERSION"
 
@@ -115,6 +145,11 @@ ARG OP_NODE_VERSION=v0.0.0
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd op-chain-ops && make op-deployer  \
   GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_DEPLOYER_VERSION"
 
+FROM --platform=$BUILDPLATFORM builder AS op-dripper-builder
+ARG OP_DRIPPER_VERSION=v0.0.0
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build cd op-dripper && make op-dripper  \
+  GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_DRIPPER_VERSION"
+
 FROM appbase AS cannon-target
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 COPY --from=cannon-builder /app/cannon/multicannon/embeds/* /usr/local/bin/
@@ -132,14 +167,25 @@ FROM appbase AS op-node-target
 COPY --from=op-node-builder /app/op-node/bin/op-node /usr/local/bin/
 CMD ["op-node"]
 
-FROM appbase AS op-challenger-target
+# Make the kona docker image published by upstream available as a source to copy kona from.
+FROM ghcr.io/op-rs/kona/kona-host:$KONA_VERSION AS kona
+# Make the asterisc docker image published by upstream available as a source to copy asterisc from.
+FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/asterisc:$ASTERISC_VERSION AS asterisc
+
+# Also produce an op-challenger loaded with kona and asterisc using ubuntu
+FROM $UBUNTU_TARGET_BASE_IMAGE AS op-challenger-target
+RUN apt-get update && apt-get install -y --no-install-recommends musl openssl ca-certificates
 COPY --from=op-challenger-builder /app/op-challenger/bin/op-challenger /usr/local/bin/
-# Make the bundled op-program the default cannon server
+# Copy in op-program and cannon
 COPY --from=op-program-builder /app/op-program/bin/op-program /usr/local/bin/
-ENV OP_CHALLENGER_CANNON_SERVER /usr/local/bin/op-program
-# Make the bundled cannon the default cannon executable
+ENV OP_CHALLENGER_CANNON_SERVER=/usr/local/bin/op-program
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
-ENV OP_CHALLENGER_CANNON_BIN /usr/local/bin/cannon
+ENV OP_CHALLENGER_CANNON_BIN=/usr/local/bin/cannon
+# Copy in kona and asterisc
+COPY --from=kona /kona-host /usr/local/bin/
+ENV OP_CHALLENGER_ASTERISC_KONA_SERVER=/usr/local/bin/kona-host
+COPY --from=asterisc /usr/local/bin/asterisc /usr/local/bin/
+ENV OP_CHALLENGER_ASTERISC_BIN=/usr/local/bin/asterisc
 CMD ["op-challenger"]
 
 FROM appbase AS op-dispute-mon-target
@@ -169,3 +215,7 @@ CMD ["op-supervisor"]
 FROM appbase AS op-deployer-target
 COPY --from=op-deployer-builder /app/op-chain-ops/bin/op-deployer /usr/local/bin/
 CMD ["op-deployer"]
+
+FROM appbase AS op-dripper-target
+COPY --from=op-dripper-builder /app/op-dripper/bin/op-dripper /usr/local/bin/
+CMD ["op-dripper"]

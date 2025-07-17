@@ -13,6 +13,10 @@ interface Vm {
     function startBroadcast(address msgSender) external;
     function startBroadcast() external;
     function stopBroadcast() external;
+    function getDeployedCode(string calldata artifactPath) external view returns (bytes memory runtimeBytecode);
+    function etch(address target, bytes calldata newRuntimeBytecode) external;
+    function allowCheatcodes(address account) external;
+    function createSelectFork(string calldata forkName, uint256 blockNumber) external returns (uint256);
 }
 
 // console is a minimal version of the console2 lib.
@@ -96,6 +100,13 @@ contract ScriptExample {
         vm.stopPrank();
         this.hello("from original again");
 
+        // vm.etch should not give cheatcode access, unless allowed to afterwards
+        address tmpNonceGetter = address(uint160(uint256(keccak256("temp nonce test getter"))));
+        vm.etch(tmpNonceGetter, vm.getDeployedCode("ScriptExample.s.sol:NonceGetter"));
+        vm.allowCheatcodes(tmpNonceGetter);
+        uint256 v = NonceGetter(tmpNonceGetter).getNonce(address(this));
+        console.log("nonce from nonce getter, no explicit access required with vm.etch:", v);
+
         console.log("done!");
     }
 
@@ -175,5 +186,91 @@ contract FooBar {
 
     constructor(uint256 v) {
         foo = v;
+    }
+}
+
+contract NonceGetter {
+    address internal constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));
+    Vm internal constant vm = Vm(VM_ADDRESS);
+
+    function getNonce(address _addr) public view returns (uint256) {
+        return vm.getNonce(_addr);
+    }
+}
+
+contract ForkedContract {
+    uint256 internal v;
+
+    constructor() {
+        v = 1;
+    }
+
+    function getValue() public view returns (uint256) {
+        return v;
+    }
+}
+
+contract ForkTester {
+    address internal constant VM_ADDRESS = address(uint160(uint256(keccak256("hevm cheat code"))));
+    Vm internal constant vm = Vm(VM_ADDRESS);
+
+    function run() external {
+        address testAddr = address(uint160(0x1234));
+        ForkedContract fc = ForkedContract(testAddr);
+
+        vm.createSelectFork("fork1", 12345);
+        require(vm.getNonce(testAddr) == 12345, "nonce should be 12345");
+        require(fc.getValue() == 1, "value should be 1");
+        require(testAddr.balance == uint256(1), "balance should be 1");
+
+        vm.createSelectFork("fork2", 23456);
+        require(vm.getNonce(testAddr) == 23456, "nonce should be 12345");
+        require(fc.getValue() == 2, "value should be 2");
+        require(testAddr.balance == uint256(2), "balance should be 2");
+    }
+}
+
+interface IDummy {
+    function dummy() external pure;
+}
+
+contract ErrorTester {
+    error Foobar();
+
+    function customErr() external pure {
+        revert Foobar();
+    }
+
+    function revertMsg() external pure {
+        revert("beep");
+    }
+
+    function nonExistentMethod() external pure {
+        IDummy dummy = IDummy(address(uint160(0x1234)));
+        dummy.dummy();
+    }
+
+    function nested() external {
+        ErrorTesterInner inner = new ErrorTesterInner();
+        inner.dead();
+    }
+
+    function tryCatch() external {
+        ErrorTesterInner inner = new ErrorTesterInner();
+
+        try inner.dead() {
+        } catch Error(string memory reason) {
+            require(keccak256(abi.encodePacked(reason)) == keccak256(abi.encodePacked("honk")), "reason should be 'honk'");
+        }
+
+        // Reverting here validates that reverts in a try/catch
+        // are replaced by other reverts.
+        revert("caught");
+    }
+}
+
+contract ErrorTesterInner {
+    function dead() external pure {
+        revert("honk");
     }
 }
