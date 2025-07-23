@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	gethevent "github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
@@ -436,7 +437,19 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 	}
 
 	if cfg.Rollup.ChainOpConfig == nil {
-		return fmt.Errorf("cfg.Rollup.ChainOpConfig is nil. Please see https://github.com/ethereum-optimism/optimism/releases/tag/op-node/v1.11.0: %w", err)
+		// Ignore the error and set default values.
+		// If you use different values, set `chain_op_config` in rollup.json.
+		// return fmt.Errorf("cfg.Rollup.ChainOpConfig is nil. Please see https://github.com/ethereum-optimism/optimism/releases/tag/op-node/v1.11.0: %w", err)
+
+		// Hardcode here to minimize conflicts.
+		// These values are the same as the default deployConfig: https://github.com/oasysgames/oasys-pos-fe/blob/6505535fc0119b515dac86b4f4f6eda4d17e9b48/src/consts/deployConfig.ts#L4-L6
+		var denominatorCanyon uint64 = 250
+		cfg.Rollup.ChainOpConfig = &params.OptimismConfig{
+			EIP1559Elasticity:        10,
+			EIP1559Denominator:       50,
+			EIP1559DenominatorCanyon: &denominatorCanyon,
+		}
+		n.log.Info(fmt.Sprintf("cfg.Rollup.ChainOpConfig is nil. default values are used. %v", cfg.Rollup.ChainOpConfig))
 	}
 
 	n.l2Driver = driver.NewDriver(n.eventSys, n.eventDrain, &cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source,
