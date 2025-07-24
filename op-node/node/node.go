@@ -437,8 +437,7 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 	}
 
 	if cfg.Rollup.ChainOpConfig == nil {
-		// Ignore the error and set default values.
-		// If you use different values, set `chain_op_config` in rollup.json.
+		// To avoid op-node crash by applying this changes, we set default values prompting user to add `chain_op_config` in rollup.json.
 		// return fmt.Errorf("cfg.Rollup.ChainOpConfig is nil. Please see https://github.com/ethereum-optimism/optimism/releases/tag/op-node/v1.11.0: %w", err)
 
 		// Hardcode here to minimize conflicts.
@@ -449,7 +448,7 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 			EIP1559Denominator:       50,
 			EIP1559DenominatorCanyon: &denominatorCanyon,
 		}
-		n.log.Info(fmt.Sprintf("cfg.Rollup.ChainOpConfig is nil. default values are used. %v", cfg.Rollup.ChainOpConfig))
+		n.log.Warn(fmt.Sprintf("cfg.Rollup.ChainOpConfig is nil. Please add `chain_op_config` in rollup.json. Temporary setting default values. %v", cfg.Rollup.ChainOpConfig))
 	}
 
 	n.l2Driver = driver.NewDriver(n.eventSys, n.eventDrain, &cfg.Driver, &cfg.Rollup, n.l2Source, n.l1Source,
