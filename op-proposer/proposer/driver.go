@@ -325,7 +325,11 @@ func (l *L2OutputSubmitter) FetchOutput(ctx context.Context, block uint64) (sour
 
 // ProposeL2OutputTxData creates the transaction data for the ProposeL2Output function
 func (l *L2OutputSubmitter) ProposeL2OutputTxData(output source.Proposal) ([]byte, error) {
-	return proposeL2OutputTxData(l.l2ooABI, output)
+	if l.Cfg.OmitBlockHashInProposals {
+		return proposeL2OutputZeroBlockHashTxData(l.l2ooABI, output)
+	} else {
+		return proposeL2OutputTxData(l.l2ooABI, output)
+	}
 }
 
 // proposeL2OutputTxData creates the transaction data for the ProposeL2Output function
@@ -336,6 +340,17 @@ func proposeL2OutputTxData(abi *abi.ABI, output source.Proposal) ([]byte, error)
 		new(big.Int).SetUint64(output.SequenceNum),
 		output.CurrentL1.Hash,
 		new(big.Int).SetUint64(output.CurrentL1.Number))
+}
+
+// proposeL2OutputZeroBlockHashTxData creates the transaction data for the ProposeL2Output function with zero blockhash value
+func proposeL2OutputZeroBlockHashTxData(abi *abi.ABI, output source.Proposal) ([]byte, error) {
+	return abi.Pack(
+		"proposeL2Output",
+		output.Root,
+		new(big.Int).SetUint64(output.SequenceNum),
+		[32]byte{},
+		common.Big0,
+	)
 }
 
 func (l *L2OutputSubmitter) ProposeL2OutputDGFTxCandidate(ctx context.Context, output source.Proposal) (txmgr.TxCandidate, error) {
