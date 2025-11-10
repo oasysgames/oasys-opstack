@@ -443,6 +443,14 @@ var (
 		Category: RollupCategory,
 		Hidden:   true,
 	}
+	/* Oasys flags. */
+	SkipL2GenesisBlockHashCheck = &cli.BoolFlag{
+		Name:     "skip-l2-genesis-block-hash-check",
+		Usage:    "Skip checking the L2 genesis block hash. Must be true for ancient pruned chains.",
+		EnvVars:  prefixEnvVars("SKIP_L2_GENESIS_BLOCK_HASH_CHECK"),
+		Category: RollupCategory,
+		Hidden:   true,
+	}
 )
 
 var requiredFlags = []cli.Flag{
@@ -498,6 +506,7 @@ var optionalFlags = []cli.Flag{
 	InteropRPCPort,
 	InteropJWTSecret,
 	IgnoreMissingPectraBlobSchedule,
+	SkipL2GenesisBlockHashCheck,
 }
 
 var DeprecatedFlags = []cli.Flag{

@@ -397,7 +397,9 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("failed to create Engine client: %w", err)
 	}
 
-	if err := cfg.Rollup.ValidateL2Config(ctx, n.l2Source, cfg.Sync.SyncMode == sync.ELSync); err != nil {
+	skipL2GenesisBlockHash := cfg.Sync.SyncMode == sync.ELSync || cfg.Sync.SkipL2GenesisBlockHashCheck
+	n.log.Info("Skip L2 genesis block hash check", "skipL2GenesisBlockHashCheck", cfg.Sync.SkipL2GenesisBlockHashCheck, "syncMode", cfg.Sync.SyncMode)
+	if err := cfg.Rollup.ValidateL2Config(ctx, n.l2Source, skipL2GenesisBlockHash); err != nil {
 		return err
 	}
 

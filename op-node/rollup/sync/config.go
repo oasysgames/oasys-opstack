@@ -72,4 +72,7 @@ type Config struct {
 	SkipSyncStartCheck bool `json:"skip_sync_start_check"`
 
 	SupportsPostFinalizationELSync bool `json:"supports_post_finalization_elsync"`
+
+	// SkipL2GenesisBlockHashCheck skip checking the L2 genesis block hash. Must be true for ancient pruned chains. Default is false.
+	SkipL2GenesisBlockHashCheck bool `json:"skip_l2_genesis_block_hash_check"`
 }

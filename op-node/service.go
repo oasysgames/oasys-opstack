@@ -300,6 +300,7 @@ func NewSyncConfig(ctx *cli.Context, log log.Logger) (*sync.Config, error) {
 		SyncMode:                       mode,
 		SkipSyncStartCheck:             ctx.Bool(flags.SkipSyncStartCheck.Name),
 		SupportsPostFinalizationELSync: engineKind.SupportsPostFinalizationELSync(),
+		SkipL2GenesisBlockHashCheck:    ctx.Bool(flags.SkipL2GenesisBlockHashCheck.Name),
 	}
 	if ctx.Bool(flags.L2EngineSyncEnabled.Name) {
 		cfg.SyncMode = sync.ELSync
