@@ -320,6 +320,7 @@ abstract contract StandardBridge is Initializable {
         bytes memory _extraData
     )
         internal
+        virtual
     {
         require(isCustomGasToken() == false, "StandardBridge: cannot bridge ETH with custom gas token");
         require(msg.value == _amount, "StandardBridge: bridging ETH must include sufficient ETH value");
@@ -354,6 +355,7 @@ abstract contract StandardBridge is Initializable {
         bytes memory _extraData
     )
         internal
+        virtual
     {
         require(msg.value == 0, "StandardBridge: cannot send value");
 
