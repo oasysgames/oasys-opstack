@@ -19,7 +19,7 @@ abstract contract SystemConfigOwnerResolver {
     /// @param _chainId Chain ID to look up.
     /// @return Final system owner address.
     function _getOwnerFromSystemConfig(uint256 _chainId) internal view returns (address) {
-        (,,, address systemConfigProxy,,,,,) = L1_BUILD_AGENT.builtLists(_chainId);
+        (, address systemConfigProxy,,,,,,,) = L1_BUILD_AGENT.builtLists(_chainId);
         require(systemConfigProxy != address(0), "invalid chain id");
 
         SystemConfig systemConfig = SystemConfig(systemConfigProxy);

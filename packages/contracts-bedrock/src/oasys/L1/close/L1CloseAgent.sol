@@ -9,12 +9,6 @@ import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
 import { SystemConfigOwnerResolver } from "src/oasys/L1/close/SystemConfigOwnerResolver.sol";
 
-interface ILegacyOptimismPortal {
-    function GUARDIAN() external view returns (address);
-    function pause() external;
-    function unpause() external;
-}
-
 /// @title L1CloseAgent
 /// @notice This contract handles the closing/shutdown of Verse chains that were previously built by L1BuildAgent.
 contract L1CloseAgent is ISemver, SystemConfigOwnerResolver {
@@ -78,9 +72,9 @@ contract L1CloseAgent is ISemver, SystemConfigOwnerResolver {
         proxyAdmin.upgrade(payable(l1ERC721BridgeProxy), CLOSED_L1_ERC721_BRIDGE);
 
         // Pause L2 -> L1 messaging
-        ILegacyOptimismPortal portal = ILegacyOptimismPortal(payable(oasysPortalProxy));
-        require(portal.GUARDIAN() == msg.sender, "not portal guardian");
-        portal.pause();
+        // BedrockPortal portal = BedrockPortal(payable(oasysPortalProxy));
+        // require(portal.GUARDIAN() == msg.sender, "not portal guardian");
+        // portal.pause();
 
         // Upgrade L1CrossDomainMessenger to closed implementation
         proxyAdmin.upgrade(payable(l1CrossDomainMessengerProxy), CLOSED_L1_CROSS_DOMAIN_MESSENGER);
