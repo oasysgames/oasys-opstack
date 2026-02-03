@@ -20,9 +20,11 @@ import { ClosedL1ERC721Bridge } from "src/oasys/L1/close/ClosedL1ERC721Bridge.so
 import { ClosedL1CrossDomainMessenger } from "src/oasys/L1/close/ClosedL1CrossDomainMessenger.sol";
 import { ClosedOptimismPortal } from "src/oasys/L1/close/ClosedOptimismPortal.sol";
 
-// Bridges (for deposit/withdraw calls)
+// Optimism Contracts
 import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { ERC721Bridge } from "src/universal/ERC721Bridge.sol";
+import { OptimismPortal } from "src/L1/OptimismPortal.sol";
+import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
 
 // Test mocks
 import { TestERC20 } from "test/mocks/TestERC20.sol";
@@ -153,6 +155,8 @@ contract L1CloseAgent_Test is Test {
 
         L1StandardBridge standardBridge = L1StandardBridge(payable(builts.l1StandardBridge));
         ERC721Bridge erc721Bridge = ERC721Bridge(payable(builts.l1ERC721Bridge));
+        OptimismPortal optimismPortal = OptimismPortal(payable(builts.oasysPortal));
+        L1CrossDomainMessenger l1CrossDomainMessenger = L1CrossDomainMessenger(payable(builts.l1CrossDomainMessenger));
 
         // --- Before close: deposits must succeed ---
         vm.prank(depositor);
@@ -187,6 +191,25 @@ contract L1CloseAgent_Test is Test {
         vm.prank(depositor);
         vm.expectRevert("bridge is closed");
         erc721Bridge.bridgeERC721(address(erc721), l2TokenDummy, nftTokenId, 200_000, "");
+
+        // -- Deposit via portal must revert --
+        vm.deal(address(this), 1 ether);
+        vm.expectRevert("portal is closed");
+        payable(address(optimismPortal)).transfer(1 ether);
+        vm.expectRevert("portal is closed");
+        optimismPortal.depositERC20Transaction(address(erc20), erc20Amount, 0, 200_000, false, "");
+        vm.expectRevert("portal is closed");
+        optimismPortal.depositTransaction(address(recipient), 0, 200_000, false, "");
+
+        // Send message via messenger must revert
+        vm.expectRevert("messenger is closed");
+        l1CrossDomainMessenger.sendMessage(
+            address(recipient),
+            abi.encodeWithSelector(
+                l1CrossDomainMessenger.relayMessage.selector, 0, address(this), address(recipient), 0, 200_000, ""
+            ),
+            200_000
+        );
 
         // --- Final system owner holds ETH and can withdraw ERC20 and ERC721 from closed bridges ---
         assertEq(address(builts.oasysPortal).balance, 0, "portal must hold no ETH");

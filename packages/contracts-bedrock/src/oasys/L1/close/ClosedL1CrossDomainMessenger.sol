@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
+import { Constants } from "src/libraries/Constants.sol";
 import { OptimismPortal } from "src/L1/OptimismPortal.sol";
 import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
 
@@ -19,5 +20,11 @@ contract ClosedL1CrossDomainMessenger is L1CrossDomainMessenger {
         override
     {
         revert("messenger is closed");
+    }
+
+    /// @inheritdoc L1CrossDomainMessenger
+    /// @notice Returns the address of the gas token and the token's decimals.
+    function gasPayingToken() internal pure override returns (address addr_, uint8 decimals_) {
+        return (Constants.ETHER, 18);
     }
 }
