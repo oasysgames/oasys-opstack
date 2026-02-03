@@ -6,6 +6,7 @@ import { Test } from "forge-std/Test.sol";
 import { console2 as console } from "forge-std/console2.sol";
 
 // Universal contracts and interfaces
+import { Proxy } from "src/universal/Proxy.sol";
 import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
 
 // Builder interfaces
@@ -95,14 +96,18 @@ contract L1CloseAgent_Test is Test {
         ClosedL1CrossDomainMessenger closedL1CrossDomainMessenger = new ClosedL1CrossDomainMessenger();
         ClosedOptimismPortal closedOptimismPortal = new ClosedOptimismPortal(buildAgent);
 
-        vm.prank(deployer);
-        l1CloseAgent = new L1CloseAgent(
+        L1CloseAgent l1CloseAgentImpl = new L1CloseAgent(
             buildAgent,
             address(closedL1StandardBridge),
             address(closedL1ERC721Bridge),
             address(closedL1CrossDomainMessenger),
             address(closedOptimismPortal)
         );
+
+        Proxy l1CloseAgentProxy = new Proxy(deployer);
+        vm.prank(deployer);
+        l1CloseAgentProxy.upgradeTo(address(l1CloseAgentImpl));
+        l1CloseAgent = L1CloseAgent(payable(address(l1CloseAgentProxy)));
 
         // Transfer ProxyAdmin to L1CloseAgent so close() can upgrade
         vm.prank(finalSystemOwner);
