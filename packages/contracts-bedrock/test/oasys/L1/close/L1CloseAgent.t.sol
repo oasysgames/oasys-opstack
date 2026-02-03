@@ -231,4 +231,38 @@ contract L1CloseAgent_Test is Test {
         vm.expectRevert("invalid chain id");
         l1CloseAgent.close(chainId + 1);
     }
+
+    // --- transferProxyAdminOwnership tests ---
+
+    function test_transferProxyAdminOwnership_success() public {
+        assertEq(proxyAdmin.owner(), address(l1CloseAgent), "setup: L1CloseAgent must own ProxyAdmin");
+
+        vm.prank(finalSystemOwner);
+        l1CloseAgent.transferProxyAdminOwnership(chainId);
+
+        assertEq(proxyAdmin.owner(), finalSystemOwner, "ProxyAdmin ownership must transfer to final system owner");
+        // Bridges must NOT be upgraded (unlike close())
+        assert(proxyAdmin.getProxyImplementation(builts.l1StandardBridge) != l1CloseAgent.CLOSED_L1_STANDARD_BRIDGE());
+    }
+
+    function test_transferProxyAdminOwnership_revert_notFinalSystemOwner() public {
+        vm.prank(verseBuilder);
+        vm.expectRevert("not final system owner");
+        l1CloseAgent.transferProxyAdminOwnership(chainId);
+    }
+
+    function test_transferProxyAdminOwnership_revert_notTransferredAdmin() public {
+        vm.prank(address(l1CloseAgent));
+        proxyAdmin.transferOwnership(finalSystemOwner);
+
+        vm.prank(finalSystemOwner);
+        vm.expectRevert("not transferred admin");
+        l1CloseAgent.transferProxyAdminOwnership(chainId);
+    }
+
+    function test_transferProxyAdminOwnership_revert_invalidChainId() public {
+        vm.prank(finalSystemOwner);
+        vm.expectRevert("invalid chain id");
+        l1CloseAgent.transferProxyAdminOwnership(chainId + 1);
+    }
 }
