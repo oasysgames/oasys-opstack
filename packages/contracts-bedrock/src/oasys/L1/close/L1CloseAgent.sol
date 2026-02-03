@@ -80,12 +80,12 @@ contract L1CloseAgent is ISemver, SystemConfigOwnerResolver {
         // Upgrade L1CrossDomainMessenger to closed implementation
         proxyAdmin.upgrade(payable(l1CrossDomainMessengerProxy), CLOSED_L1_CROSS_DOMAIN_MESSENGER);
 
-        // Upgrade portal proxy to closed implementation
-        // - Pause L2 -> L1 messaging
-        // - Stop deposits(ERC20, ETH)
+        // Upgrade portal proxy to closed implementation (Stop deposits(ETH, ERC20))
         proxyAdmin.upgrade(payable(oasysPortalProxy), CLOSED_OPTIMISM_PORTAL);
+        // Pause L2 -> L1 messaging and transfer all ETH to the final system owner
         ClosedOptimismPortal portal = ClosedOptimismPortal(payable(oasysPortalProxy));
         portal.pause(_chainId);
+        portal.transferAllETH(_chainId, finalSystemOwner);
 
         // NOTE: About L2OutputOracle
         // Don't stop L2 root submission, because challenger key can delete unintended L2 roots.

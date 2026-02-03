@@ -25,9 +25,8 @@ contract ClosedL1ERC721Bridge is OasysL1ERC721Bridge, SystemConfigOwnerResolver 
     )
         external
         virtual
+        onlyFinalSystemOwner(_chainId)
     {
-        address finalSystemOwner = _getOwnerFromSystemConfig(_chainId);
-        require(finalSystemOwner == msg.sender, "not final system owner");
         (,,, address l1ERC721BridgeProxy,,,,,) = L1_BUILD_AGENT.builtLists(_chainId);
         require(l1ERC721BridgeProxy == address(this), "not the bridge");
 

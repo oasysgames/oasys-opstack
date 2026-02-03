@@ -19,6 +19,14 @@ import { ClosedL1ERC721Bridge } from "src/oasys/L1/close/ClosedL1ERC721Bridge.so
 import { ClosedL1CrossDomainMessenger } from "src/oasys/L1/close/ClosedL1CrossDomainMessenger.sol";
 import { ClosedOptimismPortal } from "src/oasys/L1/close/ClosedOptimismPortal.sol";
 
+// Bridges (for deposit/withdraw calls)
+import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
+import { ERC721Bridge } from "src/universal/ERC721Bridge.sol";
+
+// Test mocks
+import { TestERC20 } from "test/mocks/TestERC20.sol";
+import { TestERC721 } from "test/mocks/TestERC721.sol";
+
 // Test setup
 import { SetupL1BuildAgent } from "../upgrade/SetupBedrock.sol";
 
@@ -120,6 +128,81 @@ contract L1CloseAgent_Test is Test {
 
         // make sure portal is paused
         assert(ClosedOptimismPortal(payable(builts.oasysPortal)).paused());
+    }
+
+    /// @notice Complex scenario: before close do depositETH, depositERC20, bridgeERC721;
+    ///         after close confirm deposits revert and final system owner can withdraw.
+    function test_close_scenario() public {
+        // --- Deploy test tokens ---
+        TestERC20 erc20 = new TestERC20();
+        TestERC721 erc721 = new TestERC721();
+        address l2TokenDummy = address(0x1234); // no L2 in test; dummy is ok for depositERC20
+        uint256 erc20Amount = 100e18;
+        uint256 nftTokenId = 1;
+
+        erc20.mint(depositor, erc20Amount);
+        erc721.mint(depositor, nftTokenId);
+
+        vm.deal(depositor, 2 ether);
+        address recipient = makeAddr("withdrawRecipient");
+
+        L1StandardBridge standardBridge = L1StandardBridge(payable(builts.l1StandardBridge));
+        ERC721Bridge erc721Bridge = ERC721Bridge(payable(builts.l1ERC721Bridge));
+
+        // --- Before close: deposits must succeed ---
+        vm.prank(depositor);
+        standardBridge.depositETH{ value: 1 ether }(200_000, "");
+        assertEq(address(builts.oasysPortal).balance, 1 ether, "portal must hold deposited ETH");
+
+        vm.prank(depositor);
+        erc20.approve(address(standardBridge), erc20Amount);
+        vm.prank(depositor);
+        standardBridge.depositERC20(address(erc20), l2TokenDummy, erc20Amount, 200_000, "");
+        assertEq(erc20.balanceOf(address(standardBridge)), erc20Amount, "bridge must hold deposited ERC20");
+
+        vm.prank(depositor);
+        erc721.approve(address(erc721Bridge), nftTokenId);
+        vm.prank(depositor);
+        erc721Bridge.bridgeERC721(address(erc721), l2TokenDummy, nftTokenId, 200_000, "");
+        assertEq(erc721.balanceOf(address(erc721Bridge)), 1, "bridge must hold deposited ERC721");
+
+        // --- Close the chain ---
+        uint256 finalSystemOwnerEthBefore = finalSystemOwner.balance;
+        vm.prank(finalSystemOwner);
+        l1CloseAgent.close(chainId);
+
+        // --- After close: deposit/bridge must revert ---
+        vm.prank(depositor);
+        vm.expectRevert("bridge is closed");
+        standardBridge.depositETH{ value: 1 ether }(200_000, "");
+        vm.prank(depositor);
+        vm.expectRevert("bridge is closed");
+        standardBridge.depositERC20(address(erc20), l2TokenDummy, erc20Amount, 200_000, "");
+
+        vm.prank(depositor);
+        vm.expectRevert("bridge is closed");
+        erc721Bridge.bridgeERC721(address(erc721), l2TokenDummy, nftTokenId, 200_000, "");
+
+        // --- Final system owner holds ETH and can withdraw ERC20 and ERC721 from closed bridges ---
+        assertEq(address(builts.oasysPortal).balance, 0, "portal must hold no ETH");
+        assertEq(
+            finalSystemOwner.balance,
+            finalSystemOwnerEthBefore + 1 ether,
+            "ETH should be transferred to final system owner"
+        );
+
+        ClosedL1StandardBridge closedStandardBridge = ClosedL1StandardBridge(payable(builts.l1StandardBridge));
+        ClosedL1ERC721Bridge closedErc721Bridge = ClosedL1ERC721Bridge(payable(builts.l1ERC721Bridge));
+
+        vm.prank(finalSystemOwner);
+        closedStandardBridge.withdrawERC20(chainId, address(erc20), recipient, erc20Amount);
+        assertEq(erc20.balanceOf(recipient), erc20Amount, "withdrawERC20");
+
+        uint256[] memory tokenIds = new uint256[](1);
+        tokenIds[0] = nftTokenId;
+        vm.prank(finalSystemOwner);
+        closedErc721Bridge.withdrawERC721(chainId, address(erc721), recipient, tokenIds);
+        assertEq(erc721.ownerOf(nftTokenId), recipient, "withdrawERC721");
     }
 
     function test_close_revert_notFinalSystemOwner() public {

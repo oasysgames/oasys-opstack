@@ -25,4 +25,12 @@ abstract contract SystemConfigOwnerResolver {
         SystemConfig systemConfig = SystemConfig(systemConfigProxy);
         return systemConfig.owner();
     }
+
+    /// @notice Restricts access to the final system owner for the given chain.
+    /// @param _chainId Chain ID used to resolve the final system owner.
+    modifier onlyFinalSystemOwner(uint256 _chainId) {
+        address finalSystemOwner = _getOwnerFromSystemConfig(_chainId);
+        require(finalSystemOwner == msg.sender, "not final system owner");
+        _;
+    }
 }

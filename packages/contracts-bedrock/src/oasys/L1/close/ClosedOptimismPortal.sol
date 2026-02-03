@@ -15,6 +15,17 @@ contract ClosedOptimismPortal is OptimismPortal, SystemConfigOwnerResolver {
     /// @param _l1buildAgent L1 build agent for chain config and built address lookup.
     constructor(IL1BuildAgent _l1buildAgent) SystemConfigOwnerResolver(_l1buildAgent) { }
 
+    /// @notice Transfers all native ETH held by this portal to a specified address.
+    /// @dev During close, all ETH is transferred to the final system owner.
+    /// @param _chainId Chain ID used to resolve system config and final system owner.
+    /// @param _to Recipient of the ETH.
+    function transferAllETH(uint256 _chainId, address _to) external virtual {
+        (,,,,,, address portalProxy,,) = L1_BUILD_AGENT.builtLists(_chainId);
+        require(portalProxy == address(this), "not the portal");
+        (bool success,) = payable(_to).call{ value: address(this).balance }("");
+        require(success, "transfer failed");
+    }
+
     /// @notice Returns whether the portal is paused (closed layer or superchain).
     function paused() public view override returns (bool) {
         return _closedPaused || super.paused();
