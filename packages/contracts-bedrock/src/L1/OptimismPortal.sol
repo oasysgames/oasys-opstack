@@ -184,7 +184,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
 
     /// @notice Getter for the current paused status.
     /// @return paused_ Whether or not the contract is paused.
-    function paused() public view returns (bool paused_) {
+    function paused() public view virtual returns (bool paused_) {
         paused_ = superchainConfig.paused();
     }
 
@@ -203,7 +203,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     ///         funds be deposited to their address on L2. This is intended as a convenience
     ///         function for EOAs. Contracts should call the depositTransaction() function directly
     ///         otherwise any deposited funds will be lost due to address aliasing.
-    receive() external payable {
+    receive() external payable virtual {
         depositTransaction(msg.sender, msg.value, RECEIVE_DEFAULT_GAS_LIMIT, false, bytes(""));
     }
 
@@ -449,6 +449,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         bytes memory _data
     )
         public
+        virtual
         metered(_gasLimit)
     {
         // Can only be called if an ERC20 token is used for gas paying on L2
@@ -497,6 +498,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     )
         public
         payable
+        virtual
         metered(_gasLimit)
     {
         (address token,) = gasPayingToken();

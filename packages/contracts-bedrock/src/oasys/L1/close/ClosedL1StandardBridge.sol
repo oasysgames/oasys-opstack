@@ -29,6 +29,21 @@ contract ClosedL1StandardBridge is L1StandardBridge, SystemConfigOwnerResolver {
         IERC20(_erc20).safeTransfer(_to, _amount);
     }
 
+    /// @notice Withdraws native ETH held by this bridge to a specified address.
+    /// @param _chainId Chain ID used to resolve system config and final system owner.
+    /// @param _to Recipient of the ETH.
+    /// @param _amount Amount to transfer.
+    function withdrawETH(uint256 _chainId, address _to, uint256 _amount) external virtual {
+        address finalSystemOwner = _getOwnerFromSystemConfig(_chainId);
+        require(finalSystemOwner == msg.sender, "not final system owner");
+        (,, address l1StandardBridgeProxy,,,,,,) = L1_BUILD_AGENT.builtLists(_chainId);
+        require(l1StandardBridgeProxy == address(this), "not the bridge");
+        require(address(this).balance >= _amount, "not enough balance");
+
+        (bool success,) = payable(_to).call{ value: _amount }("");
+        require(success, "transfer failed");
+    }
+
     /// @notice Reverts. The bridge is closed; ETH bridging is disabled.
     function _initiateBridgeETH(
         address, /*_from*/

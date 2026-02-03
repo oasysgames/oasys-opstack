@@ -17,6 +17,7 @@ import { L1CloseAgent } from "src/oasys/L1/close/L1CloseAgent.sol";
 import { ClosedL1StandardBridge } from "src/oasys/L1/close/ClosedL1StandardBridge.sol";
 import { ClosedL1ERC721Bridge } from "src/oasys/L1/close/ClosedL1ERC721Bridge.sol";
 import { ClosedL1CrossDomainMessenger } from "src/oasys/L1/close/ClosedL1CrossDomainMessenger.sol";
+import { ClosedOptimismPortal } from "src/oasys/L1/close/ClosedOptimismPortal.sol";
 
 // Test setup
 import { SetupL1BuildAgent } from "../upgrade/SetupBedrock.sol";
@@ -57,19 +58,6 @@ contract L1CloseAgent_Test is Test {
         vm.prank(deployer);
         (buildAgent, buildDeposit) = (new SetupL1BuildAgent()).deploy();
 
-        // Deploy closed implementations and L1CloseAgent
-        ClosedL1StandardBridge closedL1StandardBridge = new ClosedL1StandardBridge(buildAgent);
-        ClosedL1ERC721Bridge closedL1ERC721Bridge = new ClosedL1ERC721Bridge(buildAgent);
-        ClosedL1CrossDomainMessenger closedL1CrossDomainMessenger = new ClosedL1CrossDomainMessenger();
-
-        vm.prank(deployer);
-        l1CloseAgent = new L1CloseAgent(
-            buildAgent,
-            address(closedL1StandardBridge),
-            address(closedL1ERC721Bridge),
-            address(closedL1CrossDomainMessenger)
-        );
-
         buildCfg = IL1BuildAgent.BuildConfig({
             finalSystemOwner: finalSystemOwner,
             l2OutputOracleProposer: l2ooProposer,
@@ -93,6 +81,21 @@ contract L1CloseAgent_Test is Test {
         (builts,) = buildAgent.build({ chainId: chainId, cfg: buildCfg });
         proxyAdmin = ProxyAdmin(builts.proxyAdmin);
 
+        // Deploy closed implementations and L1CloseAgent (after build so we have portal proxy for close())
+        ClosedL1StandardBridge closedL1StandardBridge = new ClosedL1StandardBridge(buildAgent);
+        ClosedL1ERC721Bridge closedL1ERC721Bridge = new ClosedL1ERC721Bridge(buildAgent);
+        ClosedL1CrossDomainMessenger closedL1CrossDomainMessenger = new ClosedL1CrossDomainMessenger();
+        ClosedOptimismPortal closedOptimismPortal = new ClosedOptimismPortal(buildAgent);
+
+        vm.prank(deployer);
+        l1CloseAgent = new L1CloseAgent(
+            buildAgent,
+            address(closedL1StandardBridge),
+            address(closedL1ERC721Bridge),
+            address(closedL1CrossDomainMessenger),
+            address(closedOptimismPortal)
+        );
+
         // Transfer ProxyAdmin to L1CloseAgent so close() can upgrade
         vm.prank(finalSystemOwner);
         proxyAdmin.transferOwnership(address(l1CloseAgent));
@@ -114,6 +117,9 @@ contract L1CloseAgent_Test is Test {
             proxyAdmin.getProxyImplementation(builts.l1CrossDomainMessenger)
                 == l1CloseAgent.CLOSED_L1_CROSS_DOMAIN_MESSENGER()
         );
+
+        // make sure portal is paused
+        assert(ClosedOptimismPortal(payable(builts.oasysPortal)).paused());
     }
 
     function test_close_revert_notFinalSystemOwner() public {

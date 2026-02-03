@@ -8,6 +8,7 @@ import { L1ChugSplashProxy } from "src/legacy/L1ChugSplashProxy.sol";
 import { IL1BuildAgent } from "src/oasys/L1/build/interfaces/IL1BuildAgent.sol";
 import { ILegacyL1BuildAgent } from "src/oasys/L1/build/interfaces/ILegacyL1BuildAgent.sol";
 import { SystemConfigOwnerResolver } from "src/oasys/L1/close/SystemConfigOwnerResolver.sol";
+import { ClosedOptimismPortal } from "src/oasys/L1/close/ClosedOptimismPortal.sol";
 
 /// @title L1CloseAgent
 /// @notice This contract handles the closing/shutdown of Verse chains that were previously built by L1BuildAgent.
@@ -20,6 +21,9 @@ contract L1CloseAgent is ISemver, SystemConfigOwnerResolver {
 
     /// @notice Implementation address for the closed L1CrossDomainMessenger
     address public immutable CLOSED_L1_CROSS_DOMAIN_MESSENGER;
+
+    /// @notice Implementation address for the closed OptimismPortal
+    address public immutable CLOSED_OPTIMISM_PORTAL;
 
     /// @notice Semantic version.
     /// @custom:semver 1.0.0
@@ -34,13 +38,15 @@ contract L1CloseAgent is ISemver, SystemConfigOwnerResolver {
         IL1BuildAgent _l1buildAgent,
         address _closedL1StandardBridge,
         address _closedL1ERC721Bridge,
-        address _closedL1CrossDomainMessenger
+        address _closedL1CrossDomainMessenger,
+        address _closedOptimismPortal
     )
         SystemConfigOwnerResolver(_l1buildAgent)
     {
         CLOSED_L1_STANDARD_BRIDGE = _closedL1StandardBridge;
         CLOSED_L1_ERC721_BRIDGE = _closedL1ERC721Bridge;
         CLOSED_L1_CROSS_DOMAIN_MESSENGER = _closedL1CrossDomainMessenger;
+        CLOSED_OPTIMISM_PORTAL = _closedOptimismPortal;
     }
 
     /// @notice Closes a Verse chain by upgrading bridges to closed implementations and pausing the portal
@@ -71,13 +77,15 @@ contract L1CloseAgent is ISemver, SystemConfigOwnerResolver {
         proxyAdmin.upgrade(payable(l1StandardBridgeProxy), CLOSED_L1_STANDARD_BRIDGE);
         proxyAdmin.upgrade(payable(l1ERC721BridgeProxy), CLOSED_L1_ERC721_BRIDGE);
 
-        // Pause L2 -> L1 messaging
-        // BedrockPortal portal = BedrockPortal(payable(oasysPortalProxy));
-        // require(portal.GUARDIAN() == msg.sender, "not portal guardian");
-        // portal.pause();
-
         // Upgrade L1CrossDomainMessenger to closed implementation
         proxyAdmin.upgrade(payable(l1CrossDomainMessengerProxy), CLOSED_L1_CROSS_DOMAIN_MESSENGER);
+
+        // Upgrade portal proxy to closed implementation
+        // - Pause L2 -> L1 messaging
+        // - Stop deposits(ERC20, ETH)
+        proxyAdmin.upgrade(payable(oasysPortalProxy), CLOSED_OPTIMISM_PORTAL);
+        ClosedOptimismPortal portal = ClosedOptimismPortal(payable(oasysPortalProxy));
+        portal.pause(_chainId);
 
         // NOTE: About L2OutputOracle
         // Don't stop L2 root submission, because challenger key can delete unintended L2 roots.
