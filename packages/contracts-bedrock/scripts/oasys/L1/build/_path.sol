@@ -48,4 +48,17 @@ library Path {
     function upgradeRunOutDir() internal view returns (string memory) {
         return string.concat(upgradeOutDir(), "/run-", vm.toString(block.number));
     }
+
+    // Using from L1CloseAgent.s.sol;
+    function closeOutDir() internal view returns (string memory) {
+        return string.concat(outDir(), "/close/L1CloseAgent.s.sol");
+    }
+
+    function closeLatestOutDir() internal view returns (string memory) {
+        return string.concat(closeOutDir(), "/latest");
+    }
+
+    function closeRunOutDir() internal view returns (string memory) {
+        return string.concat(closeOutDir(), "/run-", vm.toString(block.number));
+    }
 }

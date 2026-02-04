@@ -16,7 +16,14 @@ contract OasysL1ERC721Bridge is L1ERC721Bridge, ILegacyL1ERC721Bridge {
     /// @notice Initializes the contract.
     /// @param _messenger   Contract of the CrossDomainMessenger on this network.
     /// @param _superchainConfig Contract of the SuperchainConfig contract on this network.
-    function initialize(CrossDomainMessenger _messenger, SuperchainConfig _superchainConfig) public override initializer {
+    function initialize(
+        CrossDomainMessenger _messenger,
+        SuperchainConfig _superchainConfig
+    )
+        public
+        override
+        initializer
+    {
         superchainConfig = _superchainConfig;
         __ERC721Bridge_init({
             _messenger: _messenger,
@@ -125,6 +132,7 @@ contract OasysL1ERC721Bridge is L1ERC721Bridge, ILegacyL1ERC721Bridge {
         bytes calldata _extraData
     )
         internal
+        virtual
         override
     {
         super._initiateBridgeERC721(_localToken, _remoteToken, _from, _to, _tokenId, _minGasLimit, _extraData);

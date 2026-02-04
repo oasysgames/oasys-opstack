@@ -69,7 +69,17 @@ interface IL1BuildAgent {
     function builtLists(uint256 chainId)
         external
         view
-        returns (address, address, address, address, address, address, address, address, address);
+        returns (
+            address proxyAdmin,
+            address systemConfigProxy,
+            address l1StandardBridgeProxy,
+            address l1ERC721BridgeProxy,
+            address l1CrossDomainMessengerProxy,
+            address oasysL2OutputOracleProxy,
+            address oasysPortalProxy,
+            address protocolVersionsProxy,
+            address batchInbox
+        );
 
     function chainIds(uint256 index) external view returns (uint256 chainId);
 
